@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Plus, Send, Menu, MessageSquare, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, Info, Calculator, PenTool, Zap, BookOpen, Star, Search } from 'lucide-react';
+import { Plus, Send, Menu, MessageSquare, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -390,6 +390,20 @@ const MarkdownComponents: any = {
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   
   const getSearchSnippet = (chat: Chat) => {
     if (!searchQuery) return null;
@@ -984,14 +998,25 @@ export default function App() {
           </div>
         )}
 
+        {/* Offline Indicator */}
+        {!isOnline && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-red-500/90 backdrop-blur-md border border-red-400/30 px-4 py-2 rounded-full shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-2">
+            <WifiOff size={16} className="text-white" />
+            <span className="text-white font-bold text-xs md:text-sm">
+              أنت تعمل الآن دون اتصال بالإنترنت
+            </span>
+          </div>
+        )}
+
         {/* Header Controls */}
         <div className="absolute top-0 right-0 p-4 z-10 flex items-center gap-2">
           {/* Model Selector */}
-          <div className="flex items-center gap-1 bg-[#050505]/80 backdrop-blur-sm border border-white/5 rounded-lg p-1 shadow-lg">
+          <div className={`flex items-center gap-1 bg-[#050505]/80 backdrop-blur-sm border border-white/5 rounded-lg p-1 shadow-lg ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <select 
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="bg-transparent text-xs font-bold text-[#A8A3F8] outline-none cursor-pointer px-2 py-1"
+              disabled={!isOnline}
+              className={`bg-transparent text-xs font-bold text-[#A8A3F8] outline-none cursor-pointer px-2 py-1 ${!isOnline ? 'cursor-not-allowed' : ''}`}
               dir="ltr"
             >
               <option value="gemini-3.1-pro-preview">Pro</option>
@@ -1145,10 +1170,12 @@ export default function App() {
             <div className="bg-[#1A1A1A] rounded-[24px] flex items-end p-2 shadow-lg transition-all duration-300 focus-within:bg-[#222222] focus-within:ring-1 focus-within:ring-white/10">
               <button 
                 onClick={(e) => {
+                  if (!isOnline) return;
                   e.stopPropagation();
                   setIsAttachmentOpen(!isAttachmentOpen);
                 }}
-                className="p-3 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-white/5 flex-shrink-0 mb-0.5"
+                disabled={!isOnline}
+                className={`p-3 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-white/5 flex-shrink-0 mb-0.5 ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
               >
                 <Plus size={24} className={isAttachmentOpen ? "rotate-45 transition-transform duration-200" : "transition-transform duration-200"} />
               </button>
@@ -1158,8 +1185,9 @@ export default function App() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="اسأل Aqeel Ai عن أي موضوع دراسي..."
-                className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-[200px] min-h-[44px] py-3 px-2 outline-none text-base leading-relaxed"
+                placeholder={isOnline ? "اسأل Aqeel Ai عن أي موضوع دراسي..." : "لا يمكن إرسال رسائل في وضع عدم الاتصال"}
+                disabled={!isOnline}
+                className={`flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-[200px] min-h-[44px] py-3 px-2 outline-none text-base leading-relaxed ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
                 rows={1}
                 dir="auto"
                 style={{ overflowY: message.split('\n').length > 5 ? 'auto' : 'hidden' }}
@@ -1167,8 +1195,8 @@ export default function App() {
               
               <button 
                 onClick={handleSend}
-                disabled={(!message.trim() && attachments.length === 0) || isLoading}
-                className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 mb-0.5 ${(message.trim() || attachments.length > 0) && !isLoading ? 'text-[#050505] bg-[#A8A3F8] hover:bg-[#958df5] scale-100' : 'text-neutral-600 bg-transparent scale-95 cursor-not-allowed'}`}
+                disabled={(!message.trim() && attachments.length === 0) || isLoading || !isOnline}
+                className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 mb-0.5 ${(message.trim() || attachments.length > 0) && !isLoading && isOnline ? 'text-[#050505] bg-[#A8A3F8] hover:bg-[#958df5] scale-100' : 'text-neutral-600 bg-transparent scale-95 cursor-not-allowed'}`}
               >
                 {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="rtl:-scale-x-100" />}
               </button>

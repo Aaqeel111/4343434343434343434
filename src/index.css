@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import "katex/dist/katex.min.css";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #050505;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Custom Markdown Styles - Design Templates */
+.markdown-body {
+  @apply text-lg md:text-xl leading-relaxed;
+}
+
+.markdown-body p {
+  @apply mb-4;
+}
+
+/* Template 1: Main Chapter / Big Topic (H1) */
+.markdown-body h1 {
+  @apply bg-gradient-to-l from-[#1A1A1A] to-transparent border-r-4 border-[#A8A3F8] p-4 rounded-l-xl text-2xl md:text-3xl font-bold text-white shadow-md mt-10 mb-6 block;
+}
+
+/* Template 2: Section / Subtopic (H2) */
+.markdown-body h2 {
+  @apply inline-block bg-[#111111] border border-white/10 px-5 py-2 rounded-full text-xl font-bold text-[#A8A3F8] mt-8 mb-4 shadow-sm;
+}
+
+/* Template 3: Part / Small Heading (H3) */
+.markdown-body h3 {
+  @apply text-lg font-bold text-neutral-200 border-b border-white/10 pb-2 mt-6 mb-3 flex items-center gap-2;
+}
+.markdown-body h3::before {
+  content: '❖';
+  @apply text-[#A8A3F8] text-sm;
+}
+
+/* Template 4: Info Box / Definition / Important Note (Blockquote) */
+.markdown-body blockquote {
+  @apply relative bg-[#1A1A1A] border-r-4 border-[#A8A3F8] p-5 rounded-l-xl my-6 shadow-lg text-neutral-200 text-base md:text-lg leading-relaxed;
+}
+.markdown-body blockquote p:last-child {
+  @apply mb-0;
+}
+
+.markdown-body ul {
+  @apply list-disc pr-6 mb-4 space-y-2;
+}
+
+.markdown-body ul ul, 
+.markdown-body ol ul {
+  @apply list-[circle] pr-6 mt-2;
+}
+
+.markdown-body ul li::marker {
+  @apply text-[#A8A3F8] text-lg;
+}
+
+.markdown-body ol {
+  @apply list-decimal pr-8 mb-4 space-y-2;
+}
+
+.markdown-body ol ol,
+.markdown-body ul ol {
+  @apply pr-8 mt-2;
+}
+
+.markdown-body ol li::marker {
+  @apply text-[#A8A3F8] font-bold;
+}
+
+.markdown-body li {
+  @apply text-neutral-300 leading-relaxed;
+}
+
+.markdown-body li > div {
+  @apply mb-0 inline;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+  @apply mt-2;
+}
+
+.markdown-body li > div + ul,
+.markdown-body li > div + ol {
+  @apply mt-2;
+}
+
+/* Code Blocks */
+.markdown-body pre {
+  @apply bg-[#111111] p-4 rounded-xl overflow-x-auto my-4 border border-white/10 text-sm md:text-base font-mono;
+  direction: ltr;
+}
+
+.markdown-body code {
+  @apply bg-[#111111] px-1.5 py-0.5 rounded text-[#A8A3F8] font-mono text-sm md:text-base;
+}
+
+.markdown-body pre code {
+  @apply bg-transparent p-0 text-neutral-200;
+}
+
+/* Tables */
+.markdown-body table {
+  @apply w-full border-collapse my-6 text-sm md:text-base overflow-hidden rounded-xl shadow-sm;
+}
+
+.markdown-body th {
+  @apply bg-[#1A1A1A] border border-white/10 p-4 text-right font-bold text-[#A8A3F8];
+}
+
+.markdown-body td {
+  @apply border border-white/10 p-4 text-right bg-[#0a0a0a];
+}
+
+/* Math */
+.katex-display {
+  @apply overflow-x-auto overflow-y-hidden py-4 bg-[#111111] rounded-xl border border-white/5 my-4 px-4;
+  direction: ltr;
+}
+
+/* Divider */
+.markdown-body hr {
+  @apply border-white/10 my-8 border-dashed;
+}
+
+/* Mobile Zoom */
+@media (max-width: 768px) {
+  html {
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    overscroll-behavior: none;
+  }
+
+  body {
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    touch-action: pan-y;
+    overscroll-behavior: none;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .content-zoom {
+    zoom: var(--mobile-zoom, 0.7);
+    width: 100%;
+    transform-origin: top center;
+  }
+
+  /* Allow vertical scrolling only in the chat area */
+  .overflow-y-auto {
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+}

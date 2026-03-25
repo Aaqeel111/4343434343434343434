@@ -1,15 +1,17 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Plus, Send, Menu, MessageSquare, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff } from 'lucide-react';
+import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const SYSTEM_INSTRUCTION = `أنت Aqeel Ai، مساعد ذكي مخصص للدراسة والتعليم. يجب عليك الالتزام بالتعليمات التالية بدقة:
+const SYSTEM_INSTRUCTION = `أنت KLYVON، مساعد ذكي مخصص للدراسة والتعليم. يجب عليك الالتزام بالتعليمات التالية بدقة:
 1. تحدث باللهجة العراقية المفهومة والواضحة.
 2. استخدم أسلوب الشرح التدريجي (خطوة بخطوة) للمسائل الرياضية أو العلمية.
 3. استخدم قوالب التصميم الجاهزة التالية لتنظيم المحتوى:
@@ -42,7 +44,43 @@ const SYSTEM_INSTRUCTION = `أنت Aqeel Ai، مساعد ذكي مخصص للد�
 {
   "rule": "نص القاعدة أو المعادلة هنا"
 }
-\`\`\``;
+\`\`\`
+14. لإنشاء مثال أو تمرين تفاعلي مع زر لإظهار/إخفاء الحل بخطوات مفصلة، استخدم **فقط** هذا القالب البرمجي بصيغة JSON داخل كود بلوك باسم example:
+\`\`\`example
+{
+  "question": "نص السؤال أو التمرين هنا",
+  "steps": [
+    {
+      "step": "الخطوة الأولى من الحل (يمكن أن تحتوي على معادلات)",
+      "explanation": "شرح تفصيلي لكيفية الوصول لهذه الخطوة ولماذا قمنا بها"
+    },
+    {
+      "step": "الخطوة الثانية...",
+      "explanation": "شرح الخطوة الثانية..."
+    }
+  ]
+}
+\`\`\`
+15. لإنشاء مثلث القوانين (مثل قانون أوم أو المتسعة)، استخدم **فقط** هذا القالب البرمجي بصيغة JSON داخل كود بلوك باسم triangle:
+\`\`\`triangle
+{
+  "top": { "symbol": "V", "label": "الجهد" },
+  "left": { "symbol": "R", "label": "المقاومة" },
+  "right": { "symbol": "I", "label": "التيار" }
+}
+\`\`\`
+(تأكد من استخدام الرموز والأسماء الصحيحة للقانون المطلوب).
+16. لإنشاء بطاقات تعليمية (Flashcards) للمراجعة والحفظ، استخدم **فقط** هذا القالب البرمجي بصيغة JSON داخل كود بلوك باسم flashcards:
+\`\`\`flashcards
+{
+  "title": "عنوان مجموعة البطاقات (مثال: مراجعة الفصل الأول)",
+  "cards": [
+    { "q": "السؤال أو المصطلح هنا", "a": "الإجابة أو التعريف هنا" },
+    { "q": "سؤال آخر", "a": "إجابة أخرى" }
+  ]
+}
+\`\`\`
+`;
 
 interface Message {
   id: string;
@@ -51,11 +89,24 @@ interface Message {
   attachments?: { data: string; mimeType: string; name: string }[];
 }
 
+type SourceType = 'pdf' | 'audio' | 'url' | 'youtube' | 'text' | 'web_search';
+
+interface Source {
+  id: string;
+  type: SourceType;
+  name: string;
+  content?: string;
+  file?: { data: string; mimeType: string; name: string };
+}
+
 interface Chat {
   id: string;
   title: string;
   messages: Message[];
   timestamp: number;
+  sources?: Source[];
+  isSourceMode?: boolean;
+  pinned?: boolean;
 }
 
 // Rule Card Component
@@ -305,7 +356,373 @@ const InteractiveMCQ = ({ content }: { content: string }) => {
   );
 };
 
-import rehypeRaw from 'rehype-raw';
+// Formula Triangle Component
+const FormulaTriangle = ({ content }: { content: string }) => {
+  let data: any = null;
+  try {
+    data = JSON.parse(content);
+  } catch (e) {
+    return null;
+  }
+
+  if (!data || !data.top || !data.left || !data.right) return null;
+
+  return (
+    <div className="my-8 w-full flex justify-center px-4">
+      <div className="relative w-full max-w-[320px] aspect-[1.15/1] flex flex-col items-center">
+        {/* The Triangle SVG */}
+        <svg viewBox="0 0 100 86.6" className="w-full h-full drop-shadow-2xl">
+          <path 
+            d="M50 2 L98 84.6 L2 84.6 Z" 
+            fill="#050505" 
+            stroke="#A8A3F8" 
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          {/* Horizontal Line */}
+          <line x1="25" y1="50" x2="75" y2="50" stroke="#A8A3F8" strokeWidth="1.5" />
+          {/* Vertical Line */}
+          <line x1="50" y1="50" x2="50" y2="84.6" stroke="#A8A3F8" strokeWidth="1.5" />
+        </svg>
+
+        {/* Content Overlays */}
+        {/* Top Section */}
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+          <span className="text-[#A8A3F8] text-3xl md:text-4xl font-black mb-0.5">{data.top.symbol}</span>
+          <span className="text-neutral-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">{data.top.label}</span>
+        </div>
+
+        {/* Bottom Left Section */}
+        <div className="absolute bottom-[12%] left-[28%] -translate-x-1/2 flex flex-col items-center text-center">
+          <span className="text-[#A8A3F8] text-2xl md:text-3xl font-black mb-0.5">{data.left.symbol}</span>
+          <span className="text-neutral-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">{data.left.label}</span>
+        </div>
+
+        {/* Multiplication Sign */}
+        <div className="absolute bottom-[15%] left-1/2 -translate-x-1/2">
+          <X size={20} className="text-[#A8A3F8]/60" />
+        </div>
+
+        {/* Bottom Right Section */}
+        <div className="absolute bottom-[12%] right-[28%] translate-x-1/2 flex flex-col items-center text-center">
+          <span className="text-[#A8A3F8] text-2xl md:text-3xl font-black mb-0.5">{data.right.symbol}</span>
+          <span className="text-neutral-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">{data.right.label}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Flashcards Viewer Component
+const FlashcardsViewer = ({ content }: { content: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [data, setData] = useState<{title: string, cards: {q: string, a: string}[]} | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [results, setResults] = useState<Record<number, 'known'|'unknown'>>({});
+  const [isFinished, setIsFinished] = useState(false);
+  const [reviewMode, setReviewMode] = useState<'known'|'unknown'|null>(null);
+
+  useEffect(() => {
+    try {
+      // Clean up the content string before parsing
+      // Sometimes the model might include extra whitespace or markdown artifacts
+      const cleanedContent = content.trim().replace(/^```json\s*/, '').replace(/```$/, '');
+      setData(JSON.parse(cleanedContent));
+    } catch (e) {
+      console.error("Invalid flashcards JSON", e, content);
+    }
+  }, [content]);
+
+  if (!data || !data.cards || data.cards.length === 0) return null;
+
+  const handleNext = () => {
+    if (currentIndex < data.cards.length - 1) {
+      setIsFlipped(false);
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      setIsFinished(true);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setIsFlipped(false);
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
+  const handleMark = (status: 'known'|'unknown') => {
+    setResults(prev => ({ ...prev, [currentIndex]: status }));
+    handleNext();
+  };
+
+  const reset = () => {
+    setCurrentIndex(0);
+    setIsFlipped(false);
+    setResults({});
+    setIsFinished(false);
+    setReviewMode(null);
+  };
+
+  const knownCount = Object.values(results).filter(v => v === 'known').length;
+  const unknownCount = Object.values(results).filter(v => v === 'unknown').length;
+
+  return (
+    <>
+      <div className="my-6">
+        <button 
+          onClick={() => setIsOpen(true)}
+          className="w-full md:w-auto flex items-center justify-center gap-4 bg-gradient-to-r from-[#A8A3F8]/20 to-[#A8A3F8]/5 border border-[#A8A3F8]/30 text-[#A8A3F8] px-6 py-4 rounded-2xl hover:bg-[#A8A3F8]/20 transition-all shadow-lg"
+        >
+          <div className="p-3 bg-[#A8A3F8]/20 rounded-xl">
+            <Layers size={28} />
+          </div>
+          <div className="flex flex-col items-start text-right">
+            <span className="font-bold text-lg">{data.title}</span>
+            <span className="text-sm opacity-80">{data.cards.length} بطاقات تعليمية • انقر للبدء</span>
+          </div>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed inset-0 z-[100] bg-[#050505] flex flex-col"
+            dir="rtl"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10 bg-[#111111]">
+              <h3 className="font-bold text-lg text-white truncate pr-2">{data.title}</h3>
+              <button onClick={() => setIsOpen(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Progress */}
+            {!isFinished && (
+              <div className="w-full h-1.5 bg-white/10">
+                <motion.div
+                  className="h-full bg-[#A8A3F8]"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${((currentIndex) / data.cards.length) * 100}%` }}
+                />
+              </div>
+            )}
+
+            {/* Body */}
+            <div className="flex-1 relative overflow-hidden flex flex-col items-center justify-center p-4">
+              {!isFinished ? (
+                <motion.div
+                  key={currentIndex}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  onDragEnd={(e, { offset }) => {
+                    if (offset.x < -50) handleNext();
+                    else if (offset.x > 50) handlePrev();
+                  }}
+                  className="w-full max-w-md aspect-[3/4] md:aspect-square relative [perspective:1000px]"
+                >
+                  <motion.div
+                    className="w-full h-full relative [transform-style:preserve-3d] cursor-pointer"
+                    animate={{ rotateY: isFlipped ? 180 : 0 }}
+                    transition={{ duration: 0.5, type: 'spring', stiffness: 260, damping: 20 }}
+                    onClick={() => setIsFlipped(!isFlipped)}
+                  >
+                    {/* Front */}
+                    <div className="absolute inset-0 [backface-visibility:hidden] bg-[#111111] border-2 border-white/10 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-2xl">
+                      <span className="text-3xl md:text-4xl font-bold text-white leading-relaxed">{data.cards[currentIndex].q}</span>
+                      <div className="absolute bottom-8 flex items-center gap-2 text-[#A8A3F8]/70 text-sm font-bold bg-[#A8A3F8]/10 px-4 py-2 rounded-full">
+                        <RotateCcw size={16} />
+                        <span>انقر لعرض الإجابة</span>
+                      </div>
+                    </div>
+
+                    {/* Back */}
+                    <div className="absolute inset-0 [backface-visibility:hidden] bg-gradient-to-br from-[#A8A3F8] to-[#8b85e6] text-[#050505] rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-2xl" style={{ transform: 'rotateY(180deg)' }}>
+                      <span className="text-2xl md:text-3xl font-bold leading-relaxed">{data.cards[currentIndex].a}</span>
+                      <div className="absolute bottom-8 flex items-center gap-2 text-[#050505]/70 text-sm font-bold bg-black/10 px-4 py-2 rounded-full">
+                        <RotateCcw size={16} />
+                        <span>انقر للعودة للسؤال</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ) : (
+                /* Finish Screen */
+                <div className="w-full max-w-md h-full flex flex-col justify-center">
+                  {reviewMode ? (
+                    <div className="w-full h-full flex flex-col pt-4">
+                      <button onClick={() => setReviewMode(null)} className="mb-6 text-[#A8A3F8] flex items-center gap-2 font-bold bg-white/5 w-fit px-4 py-2 rounded-xl hover:bg-white/10 transition-colors">
+                        <ChevronRight size={20} /> عودة للنتائج
+                      </button>
+                      <h2 className="text-xl font-bold text-white mb-4 px-2">
+                        {reviewMode === 'known' ? 'الإجابات الصحيحة' : 'تحتاج مراجعة'}
+                      </h2>
+                      <div className="flex-1 overflow-y-auto space-y-4 pb-20 px-2">
+                        {data.cards.filter((_, i) => results[i] === reviewMode).map((c, i) => (
+                          <div key={i} className="bg-[#111111] p-5 rounded-2xl border border-white/10">
+                            <div className="text-white font-bold mb-3 pb-3 border-b border-white/10 text-lg">{c.q}</div>
+                            <div className="text-[#A8A3F8] font-medium text-lg">{c.a}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#111111] border border-white/10 rounded-3xl p-8 flex flex-col items-center text-center shadow-2xl">
+                      <div className="text-6xl mb-6">🎉</div>
+                      <h2 className="text-3xl font-bold text-white mb-8">اكتملت المراجعة!</h2>
+                      
+                      <div className="flex w-full gap-4 mb-10">
+                        <div 
+                          onClick={() => setReviewMode('known')}
+                          className="flex-1 bg-green-500/10 border border-green-500/30 rounded-2xl p-6 cursor-pointer hover:bg-green-500/20 transition-colors"
+                        >
+                          <div className="text-green-500 mb-3"><Check size={40} className="mx-auto" /></div>
+                          <div className="text-4xl font-black text-white mb-2">{knownCount}</div>
+                          <div className="text-sm text-green-500/90 font-bold">إجابة صحيحة</div>
+                        </div>
+                        
+                        <div 
+                          onClick={() => setReviewMode('unknown')}
+                          className="flex-1 bg-red-500/10 border border-red-500/30 rounded-2xl p-6 cursor-pointer hover:bg-red-500/20 transition-colors"
+                        >
+                          <div className="text-red-500 mb-3"><X size={40} className="mx-auto" /></div>
+                          <div className="text-4xl font-black text-white mb-2">{unknownCount}</div>
+                          <div className="text-sm text-red-500/90 font-bold">تحتاج مراجعة</div>
+                        </div>
+                      </div>
+
+                      <button onClick={reset} className="w-full py-4 rounded-2xl bg-[#A8A3F8] text-[#050505] font-bold text-lg flex items-center justify-center gap-3 hover:bg-[#9690f5] transition-colors">
+                        <RotateCcw size={24} />
+                        إعادة المراجعة
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Controls */}
+            {!isFinished && (
+              <div className="p-6 pb-10 flex items-center justify-center gap-6 md:gap-10 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent">
+                <button onClick={handlePrev} disabled={currentIndex === 0} className="p-4 rounded-full bg-white/10 text-white disabled:opacity-30 hover:bg-white/20 transition-colors">
+                  <ChevronRight size={28} />
+                </button>
+
+                <button onClick={() => handleMark('unknown')} className="p-6 rounded-full bg-red-500/20 text-red-500 border-2 border-red-500/30 hover:bg-red-500/30 transition-colors shadow-lg shadow-red-500/10">
+                  <X size={36} />
+                </button>
+
+                <button onClick={() => handleMark('known')} className="p-6 rounded-full bg-green-500/20 text-green-500 border-2 border-green-500/30 hover:bg-green-500/30 transition-colors shadow-lg shadow-green-500/10">
+                  <Check size={36} />
+                </button>
+
+                <button onClick={handleNext} className="p-4 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors">
+                  <ChevronLeft size={28} />
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+// Interactive Example Component
+const InteractiveExample = ({ content }: { content: string }) => {
+  const [showSolution, setShowSolution] = useState(false);
+
+  let exampleData: any = null;
+  try {
+    exampleData = JSON.parse(content);
+  } catch (e) {
+    return null;
+  }
+
+  if (!exampleData || !exampleData.question || !exampleData.steps) return null;
+
+  return (
+    <div className="my-6 w-full max-w-3xl mx-auto">
+      <div className="bg-[#111111] border border-[#A8A3F8]/30 rounded-2xl overflow-hidden shadow-lg">
+        {/* Question Header */}
+        <div className="p-5 md:p-6 bg-gradient-to-br from-[#1A1A24] to-[#111118] border-b border-[#A8A3F8]/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-[#A8A3F8]/20 p-2 rounded-lg">
+              <PenTool size={20} className="text-[#A8A3F8]" />
+            </div>
+            <h3 className="text-[#A8A3F8] font-bold text-lg">مثال / تمرين</h3>
+          </div>
+          <div className="text-white text-lg md:text-xl font-medium leading-relaxed" dir="auto">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+              components={{
+                p: ({ children }) => <span className="inline">{children}</span>,
+              }}
+            >
+              {exampleData.question}
+            </ReactMarkdown>
+          </div>
+        </div>
+
+        {/* Solution Area */}
+        {showSolution ? (
+          <div className="p-5 md:p-6 bg-[#0A0A0A] animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="space-y-6">
+              {exampleData.steps.map((step: any, idx: number) => (
+                <div key={idx} className="relative pl-4 md:pl-6 border-r-2 border-[#A8A3F8]/30 pr-4 md:pr-6">
+                  <div className="absolute top-0 right-[-9px] w-4 h-4 rounded-full bg-[#0A0A0A] border-2 border-[#A8A3F8]"></div>
+                  <div className="text-white font-medium text-base md:text-lg mb-2" dir="auto">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {step.step}
+                    </ReactMarkdown>
+                  </div>
+                  {step.explanation && (
+                    <div className="text-neutral-400 text-sm md:text-base leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5" dir="auto">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {step.explanation}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-8 flex justify-center">
+              <button 
+                onClick={() => setShowSolution(false)}
+                className="flex items-center gap-2 text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 px-6 py-3 rounded-xl transition-colors font-medium text-sm md:text-base"
+              >
+                إخفاء الحل
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 flex justify-center bg-[#0A0A0A]">
+            <button 
+              onClick={() => setShowSolution(true)}
+              className="flex items-center gap-2 bg-[#A8A3F8] hover:bg-[#958df5] text-[#050505] px-8 py-3 rounded-xl transition-all font-bold text-base md:text-lg shadow-lg shadow-[#A8A3F8]/20 hover:scale-105 active:scale-95"
+            >
+              <CheckCircle size={20} />
+              عرض الحل
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const preprocessContent = (content: string) => {
   // Split by code blocks to avoid replacing inside them
@@ -373,6 +790,15 @@ const MarkdownComponents: any = {
     if (!inline && match && match[1] === 'rule') {
       return <RuleCard content={String(children).replace(/\n$/, '')} />;
     }
+    if (!inline && match && match[1] === 'example') {
+      return <InteractiveExample content={String(children).replace(/\n$/, '')} />;
+    }
+    if (!inline && match && match[1] === 'triangle') {
+      return <FormulaTriangle content={String(children).replace(/\n$/, '')} />;
+    }
+    if (!inline && match && match[1] === 'flashcards') {
+      return <FlashcardsViewer content={String(children).replace(/\n$/, '')} />;
+    }
     return !inline ? (
       <div className="bg-[#111111] p-4 rounded-xl overflow-x-auto my-4 border border-white/10 text-sm md:text-base font-mono" dir="ltr">
         <code className={className} {...props}>
@@ -385,6 +811,253 @@ const MarkdownComponents: any = {
       </code>
     );
   }
+};
+
+const SourcesModal = ({ isOpen, onClose, sources, setSources }: any) => {
+  const [activeTab, setActiveTab] = useState<SourceType | null>(null);
+  const [inputValue, setInputValue] = useState('');
+  const [inputName, setInputName] = useState('');
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddTextUrl = (type: SourceType) => {
+    if (!inputValue.trim()) return;
+    
+    if (editingSourceId) {
+      setSources(sources.map((s: Source) => 
+        s.id === editingSourceId 
+          ? { ...s, name: inputName.trim() || s.name, content: inputValue }
+          : s
+      ));
+      setEditingSourceId(null);
+    } else {
+      const newSource: Source = {
+        id: Date.now().toString(),
+        type,
+        name: inputName.trim() || (type === 'url' ? 'رابط ويب' : type === 'youtube' ? 'يوتيوب' : 'نص'),
+        content: inputValue
+      };
+      setSources([...sources, newSource]);
+    }
+    
+    setInputValue('');
+    setInputName('');
+    setActiveTab(null);
+  };
+
+  const handleStartEdit = (src: Source) => {
+    setEditingSourceId(src.id);
+    setActiveTab(src.type);
+    setInputValue(src.content || '');
+    setInputName(src.name);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSourceId(null);
+    setActiveTab(null);
+    setInputValue('');
+    setInputName('');
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'pdf' | 'audio') => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(',')[1];
+        setSources((prev: Source[]) => [...prev, {
+          id: Date.now().toString() + Math.random(),
+          type,
+          name: file.name,
+          file: {
+            data: base64String,
+            mimeType: file.type,
+            name: file.name
+          }
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (e.target) e.target.value = '';
+    setActiveTab(null);
+  };
+
+  const handleAddWebSearch = () => {
+    if (!sources.some((s: Source) => s.type === 'web_search')) {
+      setSources([...sources, { id: Date.now().toString(), type: 'web_search', name: 'بحث الويب' }]);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center" dir="rtl">
+          {/* Backdrop */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          />
+          
+          {/* Bottom Sheet */}
+          <motion.div 
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(_, info) => {
+              if (info.offset.y > 100) {
+                onClose();
+              }
+            }}
+            className="relative bg-[#111111] border-t border-white/10 rounded-t-[2.5rem] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl z-10"
+          >
+            {/* Drag Handle - Clickable to close */}
+            <button 
+              onClick={onClose}
+              className="w-12 h-1.5 bg-white/20 hover:bg-white/30 rounded-full mx-auto mt-4 mb-6 shrink-0 cursor-pointer transition-colors active:scale-95"
+              aria-label="إغلاق"
+            />
+            
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-6 pb-12">
+              {/* Current Sources */}
+              {sources.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-neutral-400">المصادر المضافة ({sources.length})</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {sources.map((src: Source) => (
+                      <div key={src.id} className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center justify-between group">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="p-2 bg-[#A8A3F8]/10 rounded-lg text-[#A8A3F8] shrink-0">
+                            {src.type === 'pdf' && <FileText size={18} />}
+                            {src.type === 'audio' && <Headphones size={18} />}
+                            {src.type === 'url' && <LinkIcon size={18} />}
+                            {src.type === 'youtube' && <Youtube size={18} />}
+                            {src.type === 'text' && <Type size={18} />}
+                            {src.type === 'web_search' && <Globe size={18} />}
+                          </div>
+                          <span className="text-sm text-neutral-200 truncate font-medium">{src.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                          {(src.type === 'url' || src.type === 'youtube' || src.type === 'text') && (
+                            <button 
+                              onClick={() => handleStartEdit(src)} 
+                              className="p-2 text-neutral-500 hover:text-[#A8A3F8]"
+                              title="تعديل"
+                            >
+                              <PenTool size={16} />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => setSources(sources.filter((s: Source) => s.id !== src.id))} 
+                            className="p-2 text-neutral-500 hover:text-red-400"
+                            title="حذف"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add New Source */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-neutral-400">إضافة مصدر جديد</h3>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A8A3F8]/30 transition-all text-neutral-300 hover:text-[#A8A3F8]">
+                    <FileText size={28} />
+                    <span className="text-sm font-medium">ملف PDF</span>
+                  </button>
+                  <button onClick={() => audioInputRef.current?.click()} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A8A3F8]/30 transition-all text-neutral-300 hover:text-[#A8A3F8]">
+                    <Headphones size={28} />
+                    <span className="text-sm font-medium">ملف صوتي</span>
+                  </button>
+                  <button onClick={() => setActiveTab('url')} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A8A3F8]/30 transition-all text-neutral-300 hover:text-[#A8A3F8]">
+                    <LinkIcon size={28} />
+                    <span className="text-sm font-medium">رابط موقع</span>
+                  </button>
+                  <button onClick={() => setActiveTab('youtube')} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A8A3F8]/30 transition-all text-neutral-300 hover:text-[#A8A3F8]">
+                    <Youtube size={28} />
+                    <span className="text-sm font-medium">يوتيوب</span>
+                  </button>
+                  <button onClick={() => setActiveTab('text')} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A8A3F8]/30 transition-all text-neutral-300 hover:text-[#A8A3F8]">
+                    <Type size={28} />
+                    <span className="text-sm font-medium">كتابة نص</span>
+                  </button>
+                  <button onClick={handleAddWebSearch} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A8A3F8]/30 transition-all text-neutral-300 hover:text-[#A8A3F8]">
+                    <Globe size={28} />
+                    <span className="text-sm font-medium">بحث الويب</span>
+                  </button>
+                </div>
+
+                {/* Hidden Inputs */}
+                <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" onChange={(e) => handleFileSelect(e, 'pdf')} />
+                <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" multiple onChange={(e) => handleFileSelect(e, 'audio')} />
+
+                {/* Input Forms */}
+                {activeTab && (activeTab === 'url' || activeTab === 'youtube' || activeTab === 'text') && (
+                  <div className="bg-[#1A1A1A] p-4 rounded-2xl border border-white/10 space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-white">
+                        {editingSourceId ? 'تعديل المصدر' : (activeTab === 'url' ? 'إضافة رابط موقع' : activeTab === 'youtube' ? 'إضافة رابط يوتيوب' : 'إضافة نص')}
+                      </h4>
+                      <button onClick={handleCancelEdit} className="text-neutral-500 hover:text-white"><X size={18} /></button>
+                    </div>
+                    
+                    <input 
+                      type="text" 
+                      placeholder="اسم المصدر (اختياري)" 
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value)}
+                      className="w-full bg-[#050505] border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#A8A3F8]/50"
+                    />
+
+                    {activeTab === 'text' ? (
+                      <textarea 
+                        placeholder="اكتب النص هنا..." 
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        className="w-full bg-[#050505] border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#A8A3F8]/50 min-h-[120px] resize-y"
+                      />
+                    ) : (
+                      <input 
+                        type="text" 
+                        placeholder="الصق الرابط هنا..." 
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        className="w-full bg-[#050505] border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#A8A3F8]/50"
+                        dir="ltr"
+                      />
+                    )}
+
+                    <button 
+                      onClick={() => handleAddTextUrl(activeTab)}
+                      disabled={!inputValue.trim()}
+                      className="w-full bg-[#A8A3F8] text-black font-bold py-3 rounded-xl hover:bg-[#918cf2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {editingSourceId ? 'حفظ التعديلات' : 'إضافة'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
 };
 
 export default function App() {
@@ -434,6 +1107,10 @@ export default function App() {
     return [];
   });
 
+  const [chatOptionsId, setChatOptionsId] = useState<string | null>(null);
+  const [isRenamingId, setIsRenamingId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
+
   const [currentChatId, setCurrentChatId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('aqeel_ai_current_chat_id_v2');
@@ -445,6 +1122,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<{ data: string; mimeType: string; name: string }[]>([]);
   const [selectedModel, setSelectedModel] = useState('gemini-3.1-pro-preview');
+  const [isSourceMode, setIsSourceMode] = useState(false);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(70);
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   
@@ -456,6 +1137,8 @@ export default function App() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const scrollPositionsRef = useRef<Record<string, number>>({});
+  const prevChatIdRef = useRef<string | null>(currentChatId);
 
   // Update mobile zoom
   useEffect(() => {
@@ -605,12 +1288,28 @@ export default function App() {
     }
   }, [message]);
 
-  // Scroll to bottom
+  // Scroll to bottom or restore position
   useLayoutEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = 10000000;
+    if (!chatContainerRef.current) return;
+
+    if (prevChatIdRef.current !== currentChatId) {
+      // Chat switched
+      if (currentChatId && scrollPositionsRef.current[currentChatId] !== undefined) {
+        // Restore saved position instantly
+        chatContainerRef.current.scrollTo({
+          top: scrollPositionsRef.current[currentChatId],
+          behavior: 'auto'
+        });
+      } else {
+        // New chat or no saved position, scroll to bottom instantly
+        chatContainerRef.current.scrollTo({
+          top: chatContainerRef.current.scrollHeight,
+          behavior: 'auto'
+        });
+      }
+      prevChatIdRef.current = currentChatId;
     }
-  }, [messages, currentChatId]);
+  }, [messages.length, currentChatId]);
 
   // Close attachment menu when clicking outside
   useEffect(() => {
@@ -650,9 +1349,12 @@ export default function App() {
   useEffect(() => {
     if (currentChatId && messages.length > 0 && !isLoading) {
       const messagesString = JSON.stringify(messages);
-      if (lastSyncedMessagesRef.current === messagesString) return;
+      const sourcesString = JSON.stringify(sources);
+      const syncKey = messagesString + sourcesString + isSourceMode;
       
-      lastSyncedMessagesRef.current = messagesString;
+      if (lastSyncedMessagesRef.current === syncKey) return;
+      
+      lastSyncedMessagesRef.current = syncKey;
 
       setChats(prev => {
         const chatIndex = prev.findIndex(c => c.id === currentChatId);
@@ -662,12 +1364,14 @@ export default function App() {
         updated[chatIndex] = { 
           ...updated[chatIndex], 
           messages: messages,
-          timestamp: Date.now() 
+          timestamp: Date.now(),
+          sources: sources,
+          isSourceMode: isSourceMode
         };
         return updated;
       });
     }
-  }, [messages, currentChatId, isLoading]);
+  }, [messages, currentChatId, isLoading, sources, isSourceMode]);
 
   const startNewChat = () => {
     setCurrentChatId(null);
@@ -675,6 +1379,8 @@ export default function App() {
     setMessage('');
     setAttachments([]);
     setIsSidebarOpen(false);
+    setIsSourceMode(false);
+    setSources([]);
   };
 
   const switchChat = (id: string) => {
@@ -682,20 +1388,33 @@ export default function App() {
     const activeChat = chats.find(c => c.id === id);
     if (activeChat) {
       setMessages(activeChat.messages);
+      setIsSourceMode(activeChat.isSourceMode || false);
+      setSources(activeChat.sources || []);
     } else {
       setMessages([]);
+      setIsSourceMode(false);
+      setSources([]);
     }
     setIsSidebarOpen(false);
   };
 
   const deleteChat = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     const updatedChats = chats.filter(c => c.id !== id);
     setChats(updatedChats);
     if (currentChatId === id) {
       setCurrentChatId(null);
       setMessages([]);
     }
+  };
+
+  const renameChat = (id: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    setChats(chats.map(c => c.id === id ? { ...c, title: newTitle } : c));
+  };
+
+  const togglePinChat = (id: string) => {
+    setChats(chats.map(c => c.id === id ? { ...c, pinned: !c.pinned } : c));
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -782,6 +1501,28 @@ export default function App() {
       const contents: any[] = [];
       let lastRole = '';
 
+      // Inject sources if Source Mode is active
+      if (isSourceMode && sources.length > 0) {
+        const sourceParts: any[] = [];
+        sourceParts.push({ text: "المصادر المرفقة التي يجب الاعتماد عليها 100% في الإجابة. إذا لم تكن المعلومات موجودة في المصادر، قل أنك لا تعرف:\n" });
+        
+        sources.forEach(src => {
+          if ((src.type === 'pdf' || src.type === 'audio') && src.file) {
+            sourceParts.push({
+              inlineData: { data: src.file.data, mimeType: src.file.mimeType }
+            });
+          } else if (src.type === 'text') {
+            sourceParts.push({ text: `\n--- نص مصدر (${src.name}) ---\n${src.content}\n` });
+          } else if (src.type === 'url' || src.type === 'youtube') {
+            sourceParts.push({ text: `\n--- رابط مصدر (${src.name}) ---\n${src.content}\n` });
+          }
+        });
+        
+        contents.push({ role: 'user', parts: sourceParts });
+        contents.push({ role: 'model', parts: [{ text: "حسناً، سأعتمد على هذه المصادر فقط في إجاباتي القادمة." }] });
+        lastRole = 'model';
+      }
+
       validMessages.forEach(msg => {
         const parts: any[] = [];
         if (msg.attachments && msg.attachments.length > 0) {
@@ -813,11 +1554,38 @@ export default function App() {
         });
       }
 
+      const tools: any[] = [];
+      let useWebSearch = false;
+      let useUrlContext = false;
+
+      if (isSourceMode) {
+        if (sources.some(s => s.type === 'web_search')) {
+          useWebSearch = true;
+        }
+        if (sources.some(s => s.type === 'url' || s.type === 'youtube')) {
+          useUrlContext = true;
+        }
+      }
+
+      if (useWebSearch) {
+        tools.push({ googleSearch: {} });
+      }
+      if (useUrlContext) {
+        tools.push({ urlContext: {} });
+      }
+
+      let currentSystemInstruction = SYSTEM_INSTRUCTION;
+      if (isSourceMode) {
+        currentSystemInstruction += "\n\n**تنبيه هام جداً:** وضع المصدر مفعل. يجب عليك الاعتماد بنسبة 100% على المصادر المرفقة فقط للإجابة على أسئلة المستخدم. لا تستخدم معلوماتك العامة. إذا كانت الإجابة غير موجودة في المصادر، اعتذر وقل أن المعلومات غير متوفرة في المصادر المرفقة.";
+      }
+
       const responseStream = await ai.models.generateContentStream({
         model: selectedModel,
         contents: contents,
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: currentSystemInstruction,
+          tools: tools.length > 0 ? tools : undefined,
+          toolConfig: tools.length > 0 ? { includeServerSideToolInvocations: true } : undefined
         }
       });
 
@@ -831,7 +1599,10 @@ export default function App() {
       const typeInterval = setInterval(() => {
         if (currentDisplayedText.length < fullText.length) {
           const diff = fullText.length - currentDisplayedText.length;
-          const charsToAdd = Math.max(1, Math.ceil(diff / 3)); 
+          // Smooth typing effect: add characters steadily.
+          // If buffer is huge (e.g., network burst), speed up slightly but keep it smooth.
+          const charsToAdd = diff > 100 ? 4 : diff > 50 ? 3 : diff > 20 ? 2 : 1;
+          
           currentDisplayedText += fullText.substring(currentDisplayedText.length, currentDisplayedText.length + charsToAdd);
           
           setMessages(prev => prev.map(msg => 
@@ -842,7 +1613,7 @@ export default function App() {
         } else if (isStreamComplete) {
           clearInterval(typeInterval);
         }
-      }, 15);
+      }, 20);
 
       for await (const chunk of responseStream) {
         fullText += chunk.text || '';
@@ -900,21 +1671,17 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <div 
+      <motion.div 
+        initial={false}
+        animate={{ 
+          x: sidebarDragX !== null ? sidebarDragX : (isSidebarOpen ? 0 : '100%')
+        }}
+        transition={{ type: "spring", bounce: 0, duration: 0.3 }}
         className={`
-          fixed md:static inset-y-0 right-0 z-50 w-[280px] bg-[#111111] transform transition-transform duration-150 ease-in-out
-          ${sidebarDragX !== null ? '' : (isSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0')}
-          flex flex-col border-l border-white/5
+          fixed inset-y-0 right-0 z-50 w-[280px] bg-[#050505] flex flex-col
         `}
-        style={sidebarDragX !== null ? { transform: `translateX(${sidebarDragX}px)`, transition: 'none' } : {}}
       >
-        <div className="hidden md:flex p-4 justify-between items-center border-b border-white/5">
-          <h2 className="text-lg font-semibold text-neutral-200">السجل</h2>
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-neutral-400 hover:text-white transition-colors">
-            <X size={24} />
-          </button>
-        </div>
-        <div className="p-3 border-b border-white/5">
+        <div className="p-3">
           <div className="relative">
             <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500" />
             <input 
@@ -922,7 +1689,7 @@ export default function App() {
               placeholder="بحث في السجل..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pr-10 pl-10 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-[#A8A3F8]/30 transition-all"
+              className="w-full bg-white/5 rounded-xl py-2 pr-10 pl-10 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-[#A8A3F8]/30 transition-all"
               dir="rtl"
             />
             {searchQuery && (
@@ -945,6 +1712,11 @@ export default function App() {
                 chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 chat.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
               )
+              .sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1;
+                if (!a.pinned && b.pinned) return 1;
+                return b.timestamp - a.timestamp;
+              })
               .map((chat) => {
                 const snippet = getSearchSnippet(chat);
                 return (
@@ -957,9 +1729,11 @@ export default function App() {
                           : 'hover:bg-white/5 text-neutral-400 hover:text-neutral-200 border border-transparent'}
                       `}
                     >
-                      <MessageSquare size={18} className={`mt-0.5 ${currentChatId === chat.id ? 'text-[#A8A3F8]' : 'text-neutral-500 group-hover/btn:text-[#A8A3F8]'}`} />
                       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                        <span className="truncate text-sm font-medium">{chat.title}</span>
+                        <span className="truncate text-sm font-medium flex items-center gap-1.5">
+                          {chat.pinned && <Pin size={10} className="text-[#A8A3F8] fill-[#A8A3F8]" />}
+                          {chat.title}
+                        </span>
                         {snippet && (
                           <span className="truncate text-[10px] opacity-60 font-normal text-neutral-400" dir="auto">
                             {snippet}
@@ -968,10 +1742,13 @@ export default function App() {
                       </div>
                     </button>
                     <button 
-                      onClick={(e) => deleteChat(e, chat.id)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 text-neutral-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatOptionsId(chat.id);
+                      }}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 text-neutral-600 hover:text-[#A8A3F8] opacity-0 group-hover:opacity-100 transition-all"
                     >
-                      <Trash2 size={14} />
+                      <MoreVertical size={14} />
                     </button>
                   </div>
                 );
@@ -982,12 +1759,16 @@ export default function App() {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Content */}
-      <div 
-        className={`flex-1 flex flex-col relative min-w-0 transition-transform duration-150 ease-in-out ${sidebarDragX !== null ? '' : (isSidebarOpen ? '-translate-x-[280px] md:translate-x-0' : 'translate-x-0')}`}
-        style={sidebarDragX !== null ? { transform: `translateX(-${sidebarWidth - sidebarDragX}px)`, transition: 'none' } : {}}
+      <motion.div 
+        initial={false}
+        animate={{ 
+          x: sidebarDragX !== null ? -(sidebarWidth - sidebarDragX) : (isSidebarOpen ? -280 : 0)
+        }}
+        transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+        className="flex-1 flex flex-col relative min-w-0"
       >
         {/* Zoom Indicator */}
         {showZoomIndicator && (
@@ -1010,21 +1791,6 @@ export default function App() {
 
         {/* Header Controls */}
         <div className="absolute top-0 right-0 p-4 z-10 flex items-center gap-2">
-          {/* Model Selector */}
-          <div className={`flex items-center gap-1 bg-[#050505]/80 backdrop-blur-sm border border-white/5 rounded-lg p-1 shadow-lg ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <select 
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={!isOnline}
-              className={`bg-transparent text-xs font-bold text-[#A8A3F8] outline-none cursor-pointer px-2 py-1 ${!isOnline ? 'cursor-not-allowed' : ''}`}
-              dir="ltr"
-            >
-              <option value="gemini-3.1-pro-preview">Pro</option>
-              <option value="gemini-3.1-flash-preview">Flash</option>
-              <option value="gemini-3.1-flash-lite-preview">Lite</option>
-            </select>
-          </div>
-
           <button 
             onClick={startNewChat}
             className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
@@ -1033,8 +1799,9 @@ export default function App() {
             <Plus size={24} />
           </button>
           <button 
-            onClick={() => setIsSidebarOpen(true)} 
-            className="md:hidden text-neutral-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
+            title="السجل"
           >
             <Menu size={24} />
           </button>
@@ -1044,78 +1811,129 @@ export default function App() {
         <div 
           key={currentChatId || 'new'}
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 md:p-6 pb-40"
+          onScroll={(e) => {
+            if (currentChatId) {
+              scrollPositionsRef.current[currentChatId] = e.currentTarget.scrollTop;
+            }
+          }}
+          className="flex-1 overflow-y-auto p-4 md:p-6 pb-60 md:pb-80"
         >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center content-zoom">
-              <div className="text-center space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="text-center space-y-4"
+              >
                 <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-                  اهلا بك في <span className="text-[#A8A3F8]">Aqeel Ai</span>
+                  اهلا بك في <span className="text-[#A8A3F8]">KLYVON</span>
                 </h1>
                 <p className="text-neutral-400 text-lg md:text-xl max-w-lg mx-auto leading-relaxed">
                   مساعدك الذكي المخصص للدراسة.
                 </p>
-              </div>
+              </motion.div>
             </div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-8 content-zoom">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`max-w-[90%] md:max-w-[85%] ${msg.role === 'user' ? 'bg-[#222222] text-white px-5 py-4 rounded-2xl rounded-tr-sm' : 'text-neutral-200 w-full'}`}>
-                    
-                    {/* Attachments Display */}
-                    {msg.attachments && msg.attachments.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {msg.attachments.map((att, i) => (
-                          att.mimeType.startsWith('image/') ? (
-                            <img key={i} src={`data:${att.mimeType};base64,${att.data}`} alt="attachment" className="w-32 h-32 object-cover rounded-lg border border-white/10" />
-                          ) : (
-                            <div key={i} className="flex items-center gap-2 bg-white/5 p-2 rounded-lg border border-white/10">
-                              <FileText size={16} className="text-[#A8A3F8]" />
-                              <span className="text-sm truncate max-w-[150px]">{att.name}</span>
-                            </div>
-                          )
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Message Content */}
-                    {msg.role === 'user' ? (
-                      <div className="whitespace-pre-wrap text-lg text-start" dir="auto">{msg.content}</div>
-                    ) : (
-                      <div className="markdown-body relative">
-                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeKatex, rehypeRaw]}
-                          components={MarkdownComponents}
-                        >
-                          {preprocessContent(msg.content)}
-                        </ReactMarkdown>
-                        {isLoading && msg.id === messages[messages.length - 1]?.id && (
-                          <span className="inline-block w-2 h-5 bg-[#A8A3F8] animate-pulse ml-1 align-middle mt-1"></span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <AnimatePresence initial={false}>
+                {messages.map((msg) => (
+                  <motion.div 
+                    key={msg.id} 
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
+                    className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div className={`max-w-[90%] md:max-w-[85%] ${msg.role === 'user' ? 'bg-[#222222] text-white px-5 py-4 rounded-2xl rounded-tr-2xl shadow-md' : 'text-neutral-200 w-full'}`}>
+                      
+                      {/* Attachments Display */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {msg.attachments.map((att, i) => (
+                            att.mimeType.startsWith('image/') ? (
+                              <img key={i} src={`data:${att.mimeType};base64,${att.data}`} alt="attachment" className="w-32 h-32 object-cover rounded-lg border border-white/10 shadow-sm" />
+                            ) : (
+                              <div key={i} className="flex items-center gap-2 bg-white/5 p-2 rounded-lg border border-white/10 shadow-sm">
+                                <FileText size={16} className="text-[#A8A3F8]" />
+                                <span className="text-sm truncate max-w-[150px]">{att.name}</span>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
+  
+                      {/* Message Content */}
+                      {msg.role === 'user' ? (
+                        <div className="whitespace-pre-wrap text-lg text-start" dir="auto">{msg.content}</div>
+                      ) : (
+                        <div className="markdown-body relative">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeKatex, rehypeRaw]}
+                            components={MarkdownComponents}
+                          >
+                            {preprocessContent(msg.content)}
+                          </ReactMarkdown>
+                          {isLoading && msg.id === messages[messages.length - 1]?.id && (
+                            <span className="inline-block w-2 h-5 bg-[#A8A3F8] animate-pulse ml-1 align-middle mt-1 rounded-sm"></span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
               {isLoading && messages[messages.length - 1]?.role === 'user' && (
-                <div className="flex items-start">
-                  <div className="text-neutral-400 flex items-center gap-2">
-                    <Loader2 size={20} className="animate-spin text-[#A8A3F8]" />
-                    <span>Aqeel Ai يكتب...</span>
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex items-start"
+                >
+                  <div className="text-neutral-400 flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                    <Loader2 size={16} className="animate-spin text-[#A8A3F8]" />
+                    <span className="text-sm font-medium text-neutral-300">KLYVON يكتب...</span>
                   </div>
-                </div>
+                </motion.div>
               )}
+              {/* Bottom Spacer to ensure content is above input bar */}
+              <div className="h-20 md:h-32" />
               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
         {/* Floating Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent pt-12">
+        <motion.div 
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, type: "spring", bounce: 0.2 }}
+          className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent pt-12"
+        >
           <div className="max-w-3xl mx-auto relative">
             
+            {/* Source Mode Row */}
+            <div className="flex items-center gap-3 mb-3 px-1">
+              <button 
+                onClick={() => setIsSourceMode(!isSourceMode)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-lg ${isSourceMode ? 'bg-gradient-to-r from-[#A8A3F8] to-[#8b85f0] text-[#050505] scale-105' : 'bg-[#1A1A1A] text-neutral-400 hover:bg-[#222222] hover:text-white border border-white/5'}`}
+              >
+                <Database size={16} className={isSourceMode ? "fill-current" : ""} />
+                وضع المصدر
+              </button>
+              
+              {isSourceMode && (
+                <button 
+                  onClick={() => setIsSourcesModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-[#1A1A1A] text-[#A8A3F8] hover:bg-[#222222] transition-all border border-[#A8A3F8]/30 shadow-lg"
+                >
+                  <Plus size={16} />
+                  إضافة مصادر {sources.length > 0 && `(${sources.length})`}
+                </button>
+              )}
+            </div>
+
             {/* Attachment Previews */}
             {attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3 bg-[#1A1A1A] p-3 rounded-2xl border border-white/10">
@@ -1140,70 +1958,267 @@ export default function App() {
             )}
 
             {/* Attachment Menu */}
-            {isAttachmentOpen && (
-              <div 
-                className="absolute bottom-[calc(100%+12px)] right-0 bg-[#1A1A1A] rounded-2xl p-2 shadow-2xl border border-white/10 flex flex-col gap-1 w-56 z-20 animate-in fade-in zoom-in-95 duration-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
-                  <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
-                    <ImageIcon size={18} className="text-[#A8A3F8]" />
-                  </div>
-                  <span className="font-medium">إرفاق صورة</span>
-                </button>
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
-                  <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
-                    <FileText size={18} className="text-[#A8A3F8]" />
-                  </div>
-                  <span className="font-medium">إرفاق ملف</span>
-                </button>
-                <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
-                  <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
-                    <Camera size={18} className="text-[#A8A3F8]" />
-                  </div>
-                  <span className="font-medium">فتح الكاميرا</span>
-                </button>
-              </div>
-            )}
+            <AnimatePresence>
+              {isAttachmentOpen && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.5, rotate: -5, y: 20, originX: 1, originY: 1 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.5, rotate: 5, y: 20 }}
+                  transition={{ type: "spring", damping: 25, stiffness: 500, mass: 0.5 }}
+                  className="absolute bottom-[calc(100%+12px)] right-0 bg-[#1A1A1A] rounded-2xl p-2 shadow-2xl border border-white/10 flex flex-col gap-1 w-56 z-20"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
+                    <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
+                      <ImageIcon size={18} className="text-[#A8A3F8]" />
+                    </div>
+                    <span className="font-medium">إرفاق صورة</span>
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
+                    <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
+                      <FileText size={18} className="text-[#A8A3F8]" />
+                    </div>
+                    <span className="font-medium">إرفاق ملف</span>
+                  </button>
+                  <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
+                    <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
+                      <Camera size={18} className="text-[#A8A3F8]" />
+                    </div>
+                    <span className="font-medium">فتح الكاميرا</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Input Bar */}
-            <div className="bg-[#1A1A1A] rounded-[24px] flex items-end p-2 shadow-lg transition-all duration-300 focus-within:bg-[#222222] focus-within:ring-1 focus-within:ring-white/10">
-              <button 
-                onClick={(e) => {
-                  if (!isOnline) return;
-                  e.stopPropagation();
-                  setIsAttachmentOpen(!isAttachmentOpen);
-                }}
-                disabled={!isOnline}
-                className={`p-3 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-white/5 flex-shrink-0 mb-0.5 ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
-              >
-                <Plus size={24} className={isAttachmentOpen ? "rotate-45 transition-transform duration-200" : "transition-transform duration-200"} />
-              </button>
-              
+            <div className="bg-[#1A1A1A] rounded-[32px] flex flex-col p-4 shadow-2xl border border-white/5 transition-all duration-300 focus-within:bg-[#1E1E1E] group">
               <textarea
                 ref={textareaRef}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isOnline ? "اسأل Aqeel Ai عن أي موضوع دراسي..." : "لا يمكن إرسال رسائل في وضع عدم الاتصال"}
+                placeholder={isOnline ? "اسأل KLYVON" : "لا يمكن إرسال رسائل في وضع عدم الاتصال"}
                 disabled={!isOnline}
-                className={`flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-[200px] min-h-[44px] py-3 px-2 outline-none text-base leading-relaxed ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`w-full bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-[200px] min-h-[60px] py-2 px-0 outline-none text-lg leading-relaxed text-right ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
                 rows={1}
-                dir="auto"
+                dir="rtl"
                 style={{ overflowY: message.split('\n').length > 5 ? 'auto' : 'hidden' }}
               />
               
-              <button 
-                onClick={handleSend}
-                disabled={(!message.trim() && attachments.length === 0) || isLoading || !isOnline}
-                className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 mb-0.5 ${(message.trim() || attachments.length > 0) && !isLoading && isOnline ? 'text-[#050505] bg-[#A8A3F8] hover:bg-[#958df5] scale-100' : 'text-neutral-600 bg-transparent scale-95 cursor-not-allowed'}`}
-              >
-                {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="rtl:-scale-x-100" />}
-              </button>
+              <div className="flex items-center justify-between mt-2">
+                {/* Right: Model & Plus */}
+                <div className="flex items-center gap-2 relative">
+                  {/* Model Selector */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                      className="bg-white/5 hover:bg-white/10 text-neutral-400 px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 border border-white/5"
+                    >
+                      {selectedModel === 'gemini-3.1-pro-preview' ? 'برو' : 
+                       selectedModel === 'gemini-3.1-flash-preview' ? 'فلاش' : 'لايت'}
+                    </button>
+
+                    <AnimatePresence>
+                      {isModelMenuOpen && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          className="absolute bottom-full mb-2 right-0 bg-[#1A1A1A] border border-white/10 rounded-2xl p-2 shadow-2xl flex flex-col gap-1 w-32 z-30"
+                        >
+                          <button 
+                            onClick={() => { setSelectedModel('gemini-3.1-pro-preview'); setIsModelMenuOpen(false); }}
+                            className={`p-3 rounded-xl text-right text-sm font-bold transition-colors ${selectedModel === 'gemini-3.1-pro-preview' ? 'bg-[#A8A3F8]/10 text-[#A8A3F8]' : 'text-neutral-400 hover:bg-white/5'}`}
+                          >
+                            برو
+                          </button>
+                          <button 
+                            onClick={() => { setSelectedModel('gemini-3.1-flash-preview'); setIsModelMenuOpen(false); }}
+                            className={`p-3 rounded-xl text-right text-sm font-bold transition-colors ${selectedModel === 'gemini-3.1-flash-preview' ? 'bg-[#A8A3F8]/10 text-[#A8A3F8]' : 'text-neutral-400 hover:bg-white/5'}`}
+                          >
+                            فلاش
+                          </button>
+                          <button 
+                            onClick={() => { setSelectedModel('gemini-3.1-flash-lite-preview'); setIsModelMenuOpen(false); }}
+                            className={`p-3 rounded-xl text-right text-sm font-bold transition-colors ${selectedModel === 'gemini-3.1-flash-lite-preview' ? 'bg-[#A8A3F8]/10 text-[#A8A3F8]' : 'text-neutral-400 hover:bg-white/5'}`}
+                          >
+                            لايت
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Plus Button */}
+                  <button 
+                    onClick={(e) => {
+                      if (!isOnline) return;
+                      e.stopPropagation();
+                      setIsAttachmentOpen(!isAttachmentOpen);
+                    }}
+                    disabled={!isOnline}
+                    className={`w-10 h-10 flex items-center justify-center text-neutral-400 hover:text-white transition-all rounded-full bg-white/5 hover:bg-white/10 border border-white/5 ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
+                  >
+                    <Plus size={20} className={isAttachmentOpen ? "rotate-45 transition-transform duration-200" : "transition-transform duration-200"} />
+                  </button>
+                </div>
+
+                {/* Left: Send Button */}
+                <button 
+                  onClick={handleSend}
+                  disabled={(!message.trim() && attachments.length === 0) || isLoading || !isOnline}
+                  className={`w-12 h-12 rounded-full transition-all duration-300 flex items-center justify-center flex-shrink-0 ${(message.trim() || attachments.length > 0) && !isLoading && isOnline ? 'text-[#050505] bg-[#A8A3F8] shadow-lg shadow-[#A8A3F8]/20 scale-100 hover:scale-105 active:scale-95' : 'text-neutral-600 bg-white/5 scale-95 cursor-not-allowed'}`}
+                >
+                  {isLoading ? <Loader2 size={24} className="animate-spin" /> : <ArrowUp size={28} />}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
+
+      <SourcesModal 
+        isOpen={isSourcesModalOpen} 
+        onClose={() => setIsSourcesModalOpen(false)} 
+        sources={sources} 
+        setSources={setSources} 
+      />
+
+      {/* Chat Options Bottom Sheet */}
+      <AnimatePresence>
+        {chatOptionsId && (
+          <div className="fixed inset-0 z-[100] flex items-end justify-center">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setChatOptionsId(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="relative bg-[#111111] border-t border-white/10 rounded-t-[2.5rem] w-full max-w-2xl p-6 pb-12 flex flex-col gap-4 z-10"
+            >
+              <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-4" />
+              
+              <button 
+                onClick={() => {
+                  togglePinChat(chatOptionsId);
+                  setChatOptionsId(null);
+                }}
+                className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-colors text-right"
+                dir="rtl"
+              >
+                <div className="p-3 bg-[#A8A3F8]/10 rounded-xl text-[#A8A3F8]">
+                  <Pin size={24} className={chats.find(c => c.id === chatOptionsId)?.pinned ? "fill-[#A8A3F8]" : ""} />
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="font-bold text-lg text-white">
+                    {chats.find(c => c.id === chatOptionsId)?.pinned ? 'إلغاء التثبيت' : 'تثبيت المحادثة'}
+                  </span>
+                  <span className="text-sm text-neutral-400">إبقاء هذه المحادثة في الأعلى</span>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => {
+                  const chat = chats.find(c => c.id === chatOptionsId);
+                  if (chat) {
+                    setRenameTitle(chat.title);
+                    setIsRenamingId(chatOptionsId);
+                  }
+                  setChatOptionsId(null);
+                }}
+                className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-colors text-right"
+                dir="rtl"
+              >
+                <div className="p-3 bg-[#A8A3F8]/10 rounded-xl text-[#A8A3F8]">
+                  <Edit2 size={24} />
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="font-bold text-lg text-white">إعادة تسمية</span>
+                  <span className="text-sm text-neutral-400">تغيير عنوان المحادثة</span>
+                </div>
+              </button>
+
+              <button 
+                onClick={(e) => {
+                  deleteChat(e as any, chatOptionsId);
+                  setChatOptionsId(null);
+                }}
+                className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-colors text-right"
+                dir="rtl"
+              >
+                <div className="p-3 bg-[#A8A3F8]/10 rounded-xl text-[#A8A3F8]">
+                  <Trash2 size={24} />
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="font-bold text-lg text-white">حذف المحادثة</span>
+                  <span className="text-sm text-neutral-400">حذف هذه المحادثة نهائياً</span>
+                </div>
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Rename Modal */}
+      <AnimatePresence>
+        {isRenamingId && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRenamingId(null)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-[#111111] border border-white/10 rounded-[2rem] w-full max-w-md p-8 shadow-2xl z-10"
+              dir="rtl"
+            >
+              <h3 className="text-2xl font-bold text-white mb-6">إعادة تسمية المحادثة</h3>
+              <input 
+                autoFocus
+                type="text"
+                value={renameTitle}
+                onChange={(e) => setRenameTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    renameChat(isRenamingId, renameTitle);
+                    setIsRenamingId(null);
+                  }
+                }}
+                className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:border-[#A8A3F8]/50 transition-colors mb-8"
+                placeholder="أدخل العنوان الجديد..."
+              />
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    renameChat(isRenamingId, renameTitle);
+                    setIsRenamingId(null);
+                  }}
+                  className="flex-1 bg-[#A8A3F8] text-black font-bold py-4 rounded-xl hover:bg-[#958df5] transition-colors"
+                >
+                  حفظ التغييرات
+                </button>
+                <button 
+                  onClick={() => setIsRenamingId(null)}
+                  className="flex-1 bg-white/5 text-white font-bold py-4 rounded-xl hover:bg-white/10 transition-colors"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

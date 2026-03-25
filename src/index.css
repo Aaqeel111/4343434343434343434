@@ -105,7 +105,7 @@ body {
 }
 
 .markdown-body code {
-  @apply bg-[#111111] px-1.5 py-0.5 rounded text-[#A8A3F8] font-mono text-sm md:text-base;
+  @apply text-[#A8A3F8] font-mono text-sm md:text-base;
 }
 
 .markdown-body pre code {

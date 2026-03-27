@@ -2176,7 +2176,7 @@ export default function App() {
               scrollPositionsRef.current[currentChatId] = e.currentTarget.scrollTop;
             }
           }}
-          className="flex-1 overflow-y-auto p-4 md:p-6 pb-60 md:pb-80"
+          className="flex-1 overflow-y-auto p-4 md:p-6 pb-60 md:pb-80 pt-20"
         >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center content-zoom">

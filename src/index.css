@@ -153,16 +153,16 @@ body {
 
 /* Code Blocks */
 .markdown-body pre {
-  @apply bg-[#111111] p-4 rounded-xl overflow-x-auto my-4 border border-white/10 text-sm md:text-base font-mono;
+  @apply bg-transparent border-none p-0 overflow-x-auto my-4 text-base md:text-lg font-mono font-bold text-[#A8A3F8];
   direction: ltr;
 }
 
 .markdown-body code {
-  @apply text-[#A8A3F8] font-mono text-sm md:text-base;
+  @apply text-[#A8A3F8] font-mono text-base md:text-lg bg-transparent p-0 font-bold;
 }
 
 .markdown-body pre code {
-  @apply bg-transparent p-0 text-neutral-200;
+  @apply bg-transparent p-0 text-[#A8A3F8] font-bold;
 }
 
 /* Tables */

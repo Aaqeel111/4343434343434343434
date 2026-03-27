@@ -7,75 +7,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  auth, 
-  db, 
-  googleProvider, 
-  signInWithPopup, 
-  signOut, 
-  onAuthStateChanged, 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
-  serverTimestamp,
-  handleFirestoreError,
-  OperationType,
-  FirebaseUser
-} from './firebase';
-
-// Error Boundary Component
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: any, errorInfo: any) {
-    console.error("ErrorBoundary caught an error", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 text-center">
-          <div className="max-w-md w-full bg-[#111111] border border-white/10 p-8 rounded-[2rem] shadow-2xl">
-            <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-              <X size={32} />
-            </div>
-            <h1 className="text-2xl font-bold text-white mb-4">عذراً، حدث خطأ غير متوقع</h1>
-            <p className="text-neutral-400 mb-8">
-              لقد واجهنا مشكلة في تشغيل التطبيق. يرجى محاولة إعادة تحميل الصفحة.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="w-full bg-[#A8A3F8] text-[#050505] py-4 rounded-2xl font-bold hover:bg-[#918cf2] transition-all"
-            >
-              إعادة تحميل الصفحة
-            </button>
-            {process.env.NODE_ENV === 'development' && (
-              <pre className="mt-6 p-4 bg-black/50 rounded-xl text-left text-xs text-red-400 overflow-auto max-h-40">
-                {this.state.error?.message || String(this.state.error)}
-              </pre>
-            )}
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -174,13 +105,11 @@ interface Source {
 interface Chat {
   id: string;
   title: string;
-  messages?: Message[];
+  messages: Message[];
   timestamp: number;
   sources?: Source[];
   isSourceMode?: boolean;
   pinned?: boolean;
-  createdAt: any;
-  updatedAt: any;
 }
 
 // Rule Card Component
@@ -1377,8 +1306,6 @@ const SourcesModal = ({ isOpen, onClose, sources, setSources }: any) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
@@ -1399,10 +1326,17 @@ export default function App() {
   const getSearchSnippet = (chat: Chat) => {
     if (!searchQuery) return null;
     const query = searchQuery.toLowerCase();
-    // Since messages are no longer part of the chat object in the sidebar list,
-    // we can only search the title for now, or implement a more complex search.
-    if (chat.title.toLowerCase().includes(query)) return null;
-    return null;
+    const matchingMessage = chat.messages.find(m => m.content.toLowerCase().includes(query));
+    if (!matchingMessage) return null;
+    
+    const content = matchingMessage.content;
+    const index = content.toLowerCase().indexOf(query);
+    const start = Math.max(0, index - 20);
+    const end = Math.min(content.length, index + query.length + 40);
+    let snippet = content.substring(start, end);
+    if (start > 0) snippet = '...' + snippet;
+    if (end < content.length) snippet = snippet + '...';
+    return snippet;
   };
 
   const [sidebarDragX, setSidebarDragX] = useState<number | null>(null);
@@ -1410,7 +1344,13 @@ export default function App() {
   const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [message, setMessage] = useState('');
   
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [chats, setChats] = useState<Chat[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('aqeel_ai_chats_v2');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
 
   const [chatOptionsId, setChatOptionsId] = useState<string | null>(null);
   const [isRenamingId, setIsRenamingId] = useState<string | null>(null);
@@ -1435,6 +1375,15 @@ export default function App() {
   const [isPdfMode, setIsPdfMode] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
+
+  // Auto-activate source mode when sources are added
+  useEffect(() => {
+    if (sources.length > 0) {
+      setIsSourceMode(true);
+    } else {
+      setIsSourceMode(false);
+    }
+  }, [sources]);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(70);
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
@@ -1451,141 +1400,6 @@ export default function App() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const scrollPositionsRef = useRef<Record<string, number>>({});
   const prevChatIdRef = useRef<string | null>(currentChatId);
-
-  // Auth Listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setIsAuthReady(true);
-      
-      if (currentUser) {
-        // Sync user profile
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        try {
-          await setDoc(userDocRef, {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-            photoURL: currentUser.photoURL,
-            lastLogin: serverTimestamp(),
-            role: 'user'
-          }, { merge: true });
-        } catch (error) {
-          console.error("Error syncing user profile:", error);
-        }
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Login failed:", error);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
-
-  // Sync Chats with Firestore
-  useEffect(() => {
-    if (!user || !isAuthReady) return;
-
-    const chatsRef = collection(db, 'users', user.uid, 'chats');
-    const q = query(chatsRef, orderBy('updatedAt', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const chatList = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          title: data.title || 'محادثة جديدة',
-          timestamp: data.updatedAt?.toMillis() || Date.now(),
-          sources: data.sources || [],
-          isSourceMode: data.isSourceMode || false,
-          pinned: data.pinned || false,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date()
-        } as Chat;
-      });
-      setChats(chatList);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/chats`);
-    });
-
-    return () => unsubscribe();
-  }, [user, isAuthReady]);
-
-  // Sync Messages with Firestore
-  useEffect(() => {
-    if (!user || !currentChatId || !isAuthReady) return;
-
-    const messagesRef = collection(db, 'users', user.uid, 'chats', currentChatId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messageList = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          role: data.role,
-          content: data.content,
-          attachments: data.attachments || [],
-          timestamp: data.timestamp?.toDate() || new Date()
-        } as Message;
-      });
-      setMessages(messageList);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/chats/${currentChatId}/messages`);
-    });
-
-    return () => unsubscribe();
-  }, [user, currentChatId, isAuthReady]);
-
-  // Update sendMessage to save to Firestore
-  const saveMessageToFirestore = async (chatId: string, msg: Message) => {
-    if (!user) return;
-    try {
-      const messagesRef = collection(db, 'users', user.uid, 'chats', chatId, 'messages');
-      await addDoc(messagesRef, {
-        ...msg,
-        timestamp: serverTimestamp()
-      });
-      
-      const chatRef = doc(db, 'users', user.uid, 'chats', chatId);
-      await updateDoc(chatRef, { updatedAt: serverTimestamp() });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/chats/${chatId}/messages`);
-    }
-  };
-
-  // Update createChat to save to Firestore
-  const createChatOnFirestore = async (title: string) => {
-    if (!user) return null;
-    try {
-      const chatsRef = collection(db, 'users', user.uid, 'chats');
-      const newChat = await addDoc(chatsRef, {
-        userId: user.uid,
-        title,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        isSourceMode: isSourceMode,
-        sources: sources,
-        isPdfMode: isPdfMode
-      });
-      return newChat.id;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/chats`);
-      return null;
-    }
-  };
 
   // Update mobile zoom
   useEffect(() => {
@@ -1793,33 +1607,35 @@ export default function App() {
   // Use a ref to avoid infinite loops and only sync when messages actually change
   const lastSyncedMessagesRef = useRef<string>('');
 
-  // Sync current chat settings to Firestore
   useEffect(() => {
-    if (!user || !currentChatId || isLoading) return;
+    if (currentChatId && messages.length > 0 && !isLoading) {
+      const messagesString = JSON.stringify(messages);
+      const sourcesString = JSON.stringify(sources);
+      const syncKey = messagesString + sourcesString + isSourceMode;
+      
+      if (lastSyncedMessagesRef.current === syncKey) return;
+      
+      lastSyncedMessagesRef.current = syncKey;
 
-    const saveSettings = async () => {
-      try {
-        const chatRef = doc(db, 'users', user.uid, 'chats', currentChatId);
-        await updateDoc(chatRef, {
+      setChats(prev => {
+        const chatIndex = prev.findIndex(c => c.id === currentChatId);
+        if (chatIndex === -1) return prev;
+        
+        const updated = [...prev];
+        updated[chatIndex] = { 
+          ...updated[chatIndex], 
+          messages: messages,
+          timestamp: Date.now(),
           sources: sources,
-          isSourceMode: isSourceMode,
-          updatedAt: serverTimestamp()
-        });
-      } catch (error) {
-        // Silent error for settings sync to avoid spamming
-        console.error("Error syncing chat settings:", error);
-      }
-    };
-
-    const timeoutId = setTimeout(saveSettings, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [currentChatId, sources, isSourceMode, user, isLoading]);
+          isSourceMode: isSourceMode
+        };
+        return updated;
+      });
+    }
+  }, [messages, currentChatId, isLoading, sources, isSourceMode]);
 
   const startNewChat = () => {
     setCurrentChatId(null);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('aqeel_ai_current_chat_id_v2');
-    }
     setMessages([]);
     setMessage('');
     setAttachments([]);
@@ -1830,64 +1646,36 @@ export default function App() {
 
   const switchChat = (id: string) => {
     setCurrentChatId(id);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('aqeel_ai_current_chat_id_v2', id);
-    }
     const activeChat = chats.find(c => c.id === id);
     if (activeChat) {
+      setMessages(activeChat.messages);
       setIsSourceMode(activeChat.isSourceMode || false);
       setSources(activeChat.sources || []);
     } else {
+      setMessages([]);
       setIsSourceMode(false);
       setSources([]);
     }
     setIsSidebarOpen(false);
   };
 
-  const deleteChat = async (e: React.MouseEvent, id: string) => {
+  const deleteChat = (e: React.MouseEvent, id: string) => {
     if (e) e.stopPropagation();
-    if (!user) return;
-
-    try {
-      const chatRef = doc(db, 'users', user.uid, 'chats', id);
-      // Note: In a real app, you'd also delete the messages subcollection.
-      // Firestore doesn't delete subcollections automatically when a document is deleted.
-      // For this applet, we'll just delete the chat document.
-      await deleteDoc(chatRef);
-      
-      if (currentChatId === id) {
-        setCurrentChatId(null);
-        setMessages([]);
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/chats/${id}`);
+    const updatedChats = chats.filter(c => c.id !== id);
+    setChats(updatedChats);
+    if (currentChatId === id) {
+      setCurrentChatId(null);
+      setMessages([]);
     }
   };
 
-  const renameChat = async (id: string, newTitle: string) => {
-    if (!newTitle.trim() || !user) return;
-    try {
-      const chatRef = doc(db, 'users', user.uid, 'chats', id);
-      await updateDoc(chatRef, { title: newTitle, updatedAt: serverTimestamp() });
-      setIsRenamingId(null);
-      setChatOptionsId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/chats/${id}`);
-    }
+  const renameChat = (id: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    setChats(chats.map(c => c.id === id ? { ...c, title: newTitle } : c));
   };
 
-  const togglePinChat = async (id: string) => {
-    if (!user) return;
-    const chat = chats.find(c => c.id === id);
-    if (!chat) return;
-    
-    try {
-      const chatRef = doc(db, 'users', user.uid, 'chats', id);
-      await updateDoc(chatRef, { pinned: !chat.pinned, updatedAt: serverTimestamp() });
-      setChatOptionsId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/chats/${id}`);
-    }
+  const togglePinChat = (id: string) => {
+    setChats(chats.map(c => c.id === id ? { ...c, pinned: !c.pinned } : c));
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1927,25 +1715,22 @@ export default function App() {
       attachments: [...attachments]
     };
 
-    // Optimistic update for UI responsiveness
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     
+    // Create Chat in history if it doesn't exist
     let activeId = currentChatId;
     if (!activeId) {
-      const newId = await createChatOnFirestore(message.substring(0, 30) || 'محادثة جديدة');
-      if (!newId) {
-        setIsLoading(false);
-        return;
-      }
-      activeId = newId;
+      activeId = Date.now().toString();
+      const newChat: Chat = {
+        id: activeId,
+        title: message.substring(0, 30) || 'محادثة جديدة',
+        messages: newMessages,
+        timestamp: Date.now()
+      };
+      setChats(prev => [newChat, ...prev]);
       setCurrentChatId(activeId);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('aqeel_ai_current_chat_id_v2', activeId);
-      }
     }
-
-    // Save user message to Firestore
-    await saveMessageToFirestore(activeId, userMessage);
 
     setMessage('');
     setAttachments([]);
@@ -2126,14 +1911,6 @@ export default function App() {
       }
       isStreamComplete = true;
 
-      // Save assistant message to Firestore
-      const assistantMessage: Message = {
-        id: assistantMessageId,
-        role: 'model',
-        content: fullText
-      };
-      await saveMessageToFirestore(activeId, assistantMessage);
-
     } catch (error) {
       console.error('Error generating response:', error);
       setMessages(prev => [...prev, { 
@@ -2287,11 +2064,13 @@ export default function App() {
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {chats.filter(chat => 
-            chat.title.toLowerCase().includes(searchQuery.toLowerCase())
+            chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            chat.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
           ).length > 0 ? (
             chats
               .filter(chat => 
-                chat.title.toLowerCase().includes(searchQuery.toLowerCase())
+                chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                chat.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
               )
               .sort((a, b) => {
                 if (a.pinned && !b.pinned) return -1;
@@ -2373,18 +2152,18 @@ export default function App() {
         {/* Header Controls */}
         <div className="absolute top-0 right-0 p-4 z-10 flex items-center gap-2">
           <button 
-            onClick={startNewChat}
-            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
-            title="محادثة جديدة"
-          >
-            <Plus size={24} />
-          </button>
-          <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
+            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-full hover:bg-[#222222] bg-[#1A1A1A] border border-white/5 shadow-lg"
             title="السجل"
           >
             <Menu size={24} />
+          </button>
+          <button 
+            onClick={startNewChat}
+            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-full hover:bg-[#222222] bg-[#1A1A1A] border border-white/5 shadow-lg"
+            title="محادثة جديدة"
+          >
+            <Plus size={24} />
           </button>
         </div>
 
@@ -2430,16 +2209,18 @@ export default function App() {
                       
                       {/* Attachments Display */}
                       {msg.attachments && msg.attachments.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-3">
+                        <div className="flex flex-nowrap gap-4 mb-3 overflow-x-auto pb-2">
                           {msg.attachments.map((att, i) => (
-                            att.mimeType.startsWith('image/') ? (
-                              <img key={i} src={`data:${att.mimeType};base64,${att.data}`} alt="attachment" className="w-32 h-32 object-cover rounded-lg border border-white/10 shadow-sm" />
-                            ) : (
-                              <div key={i} className="flex items-center gap-2 bg-white/5 p-2 rounded-lg border border-white/10 shadow-sm">
-                                <FileText size={16} className="text-[#A8A3F8]" />
-                                <span className="text-sm truncate max-w-[150px]">{att.name}</span>
-                              </div>
-                            )
+                            <div key={i} className="flex-shrink-0">
+                              {att.mimeType.startsWith('image/') ? (
+                                <img src={`data:${att.mimeType};base64,${att.data}`} alt="attachment" className="w-32 h-32 object-cover rounded-lg border border-white/10 shadow-sm" />
+                              ) : (
+                                <div className="flex items-center gap-2 bg-white/5 p-2 rounded-lg border border-white/10 shadow-sm">
+                                  <FileText size={16} className="text-[#A8A3F8]" />
+                                  <span className="text-sm truncate max-w-[150px]">{att.name}</span>
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       )}
@@ -2494,52 +2275,23 @@ export default function App() {
         >
           <div className="max-w-3xl mx-auto relative">
             
-            {/* Source Mode Row */}
-            <div className="flex items-center gap-3 mb-3 px-1">
-              <button 
-                onClick={() => setIsSourceMode(!isSourceMode)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-lg ${isSourceMode ? 'bg-gradient-to-r from-[#A8A3F8] to-[#8b85f0] text-[#050505] scale-105' : 'bg-[#1A1A1A] text-neutral-400 hover:bg-[#222222] hover:text-white border border-white/5'}`}
-              >
-                <Database size={16} className={isSourceMode ? "fill-current" : ""} />
-                وضع المصدر
-              </button>
-              
-              <button 
-                onClick={() => setIsPdfMode(!isPdfMode)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-lg ${isPdfMode ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-[#050505] scale-105' : 'bg-[#1A1A1A] text-neutral-400 hover:bg-[#222222] hover:text-white border border-white/5'}`}
-              >
-                <FileText size={16} className={isPdfMode ? "fill-current" : ""} />
-                وضع PDF
-              </button>
-              
-              {isSourceMode && (
-                <button 
-                  onClick={() => setIsSourcesModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-[#1A1A1A] text-[#A8A3F8] hover:bg-[#222222] transition-all border border-[#A8A3F8]/30 shadow-lg"
-                >
-                  <Plus size={16} />
-                  إضافة مصادر {sources.length > 0 && `(${sources.length})`}
-                </button>
-              )}
-            </div>
-
             {/* Attachment Previews */}
             {attachments.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3 bg-[#1A1A1A] p-3 rounded-2xl border border-white/10">
+              <div className="flex flex-nowrap justify-start gap-4 mb-3 overflow-x-auto pb-2">
                 {attachments.map((att, index) => (
-                  <div key={index} className="relative group">
+                  <div key={index} className="relative group flex-shrink-0 mt-2 mr-2">
                     {att.mimeType.startsWith('image/') ? (
-                      <img src={`data:${att.mimeType};base64,${att.data}`} alt="preview" className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                      <img src={`data:${att.mimeType};base64,${att.data}`} alt="preview" className="w-32 h-32 object-cover rounded-lg border border-white/20" />
                     ) : (
-                      <div className="w-16 h-16 flex items-center justify-center bg-white/5 rounded-lg border border-white/20">
-                        <FileText size={24} className="text-[#A8A3F8]" />
+                      <div className="w-32 h-32 flex items-center justify-center bg-white/5 rounded-lg border border-white/20">
+                        <FileText size={48} className="text-[#A8A3F8]" />
                       </div>
                     )}
                     <button 
                       onClick={() => removeAttachment(index)}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                      className="absolute -top-2 -right-2 bg-neutral-500 text-white rounded-full p-1 shadow-lg z-10"
                     >
-                      <Trash2 size={12} />
+                      <X size={12} />
                     </button>
                   </div>
                 ))}
@@ -2574,6 +2326,15 @@ export default function App() {
                     </div>
                     <span className="font-medium">فتح الكاميرا</span>
                   </button>
+                  <button onClick={() => { setIsSourcesModalOpen(true); setIsAttachmentOpen(false); }} className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-right transition-colors text-sm text-neutral-200">
+                    <div className="bg-[#A8A3F8]/10 p-2 rounded-lg">
+                      <Database size={18} className="text-[#A8A3F8]" />
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">المصادر</span>
+                      {sources.length > 0 && <span className="text-[10px] text-[#A8A3F8] font-bold">{sources.length} مصادر</span>}
+                    </div>
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -2596,6 +2357,19 @@ export default function App() {
               <div className="flex items-center justify-between mt-2">
                 {/* Right: Model & Plus */}
                 <div className="flex items-center gap-2 relative">
+                  {/* Plus Button */}
+                  <button 
+                    onClick={(e) => {
+                      if (!isOnline) return;
+                      e.stopPropagation();
+                      setIsAttachmentOpen(!isAttachmentOpen);
+                    }}
+                    disabled={!isOnline}
+                    className={`w-10 h-10 flex items-center justify-center text-neutral-400 hover:text-white transition-all rounded-full bg-white/5 hover:bg-white/10 border border-white/5 ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
+                  >
+                    <Plus size={20} className={isAttachmentOpen ? "rotate-45 transition-transform duration-200" : "transition-transform duration-200"} />
+                  </button>
+
                   {/* Model Selector */}
                   <div className="relative">
                     <button 
@@ -2637,17 +2411,13 @@ export default function App() {
                     </AnimatePresence>
                   </div>
 
-                  {/* Plus Button */}
+                  {/* PDF Button */}
                   <button 
-                    onClick={(e) => {
-                      if (!isOnline) return;
-                      e.stopPropagation();
-                      setIsAttachmentOpen(!isAttachmentOpen);
-                    }}
-                    disabled={!isOnline}
-                    className={`w-10 h-10 flex items-center justify-center text-neutral-400 hover:text-white transition-all rounded-full bg-white/5 hover:bg-white/10 border border-white/5 ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
+                    onClick={() => setIsPdfMode(!isPdfMode)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-lg ${isPdfMode ? 'bg-gradient-to-r from-[#A8A3F8] to-[#8b85f0] text-[#050505] scale-105' : 'bg-[#1A1A1A] text-neutral-400 hover:bg-[#222222] hover:text-white border border-white/5'}`}
                   >
-                    <Plus size={20} className={isAttachmentOpen ? "rotate-45 transition-transform duration-200" : "transition-transform duration-200"} />
+                    <FileText size={16} className={isPdfMode ? "fill-current" : ""} />
+                    إنشاء PDF
                   </button>
                 </div>
 

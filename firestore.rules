@@ -13,6 +13,7 @@ service cloud.firestore {
     //   - email: string (required, email format) - The user's email
     //   - displayName: string (optional) - The user's display name
     //   - photoURL: string (optional, URL format) - The user's photo URL
+    //   - geminiApiKey: string (optional) - The user's personal Gemini API key
     //   - createdAt: timestamp (required, immutable) - Creation time
     //   - lastLogin: timestamp (optional) - Last login time
     //   - role: string (required, enum: ['user', 'admin']) - User role
@@ -79,12 +80,13 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'email', 'createdAt', 'role']) &&
-             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'lastLogin', 'role']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'geminiApiKey', 'createdAt', 'lastLogin', 'role']) &&
              data.uid == request.auth.uid &&
-             data.email == request.auth.token.email &&
+             data.email.lower() == request.auth.token.email.lower() &&
              isValidEmail(data.email) &&
              data.role in ['user', 'admin'] &&
-             (data.photoURL == null || isValidUrl(data.photoURL));
+             (data.photoURL == null || isValidUrl(data.photoURL)) &&
+             (data.geminiApiKey == null || (data.geminiApiKey is string && data.geminiApiKey.size() < 200));
     }
 
     function isValidChat(data) {

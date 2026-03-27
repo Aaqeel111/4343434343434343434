@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp } from 'lucide-react';
+import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -431,9 +431,14 @@ const FlashcardsViewer = ({ content }: { content: string }) => {
       // Clean up the content string before parsing
       // Sometimes the model might include extra whitespace or markdown artifacts
       const cleanedContent = content.trim().replace(/^```json\s*/, '').replace(/```$/, '');
-      setData(JSON.parse(cleanedContent));
+      if (cleanedContent) {
+        setData(JSON.parse(cleanedContent));
+      }
     } catch (e) {
-      console.error("Invalid flashcards JSON", e, content);
+      // Only log if it's not a typical streaming incomplete JSON error
+      if (!(e instanceof SyntaxError && e.message.includes('JSON'))) {
+        console.error("Invalid flashcards JSON", e, content);
+      }
     }
   }, [content]);
 
@@ -727,6 +732,40 @@ const InteractiveExample = ({ content }: { content: string }) => {
   );
 };
 
+const PdfCard = ({ content, onPreview, onPrint }: { content: string, onPreview: (html: string) => void, onPrint: (html: string) => void }) => {
+  return (
+    <div className="my-6 w-full max-w-3xl mx-auto bg-[#111111] border border-green-500/30 rounded-[2rem] p-8 shadow-2xl flex flex-col items-center justify-center relative overflow-hidden group">
+      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-500"></div>
+      <div className="absolute -top-20 -right-20 w-64 h-64 bg-green-500/10 rounded-full blur-3xl"></div>
+      <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
+      
+      <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/20 relative z-10">
+        <FileText size={40} className="text-green-400" />
+      </div>
+      
+      <h3 className="text-2xl font-bold text-white mb-3 z-10 text-center">تم إنشاء الملف بنجاح! ✅</h3>
+      <p className="text-neutral-400 mb-8 z-10 text-center max-w-md leading-relaxed">
+        تم تجهيز الملف بتصميم احترافي. يمكنك الآن معاينته، تعديل النصوص، أو طباعته مباشرة كـ PDF.
+      </p>
+      
+      <div className="flex flex-wrap items-center justify-center gap-4 z-10 w-full">
+        <button 
+          onClick={() => onPreview(content)}
+          className="flex-1 min-w-[120px] flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:scale-105 active:scale-95"
+        >
+          <Eye size={20} /> معاينة
+        </button>
+        <button 
+          onClick={() => onPrint(content)}
+          className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-[#050505] px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-green-500/20 hover:scale-105 active:scale-95"
+        >
+          <Printer size={20} /> طباعة PDF
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const preprocessContent = (content: string) => {
   // Split by code blocks to avoid replacing inside them
   const parts = content.split(/(```[\s\S]*?```)/g);
@@ -738,6 +777,12 @@ const preprocessContent = (content: string) => {
   });
   
   let processed = processedParts.join('');
+
+  // Replace PDF blocks with a custom code block
+  const pdfRegex = /<!--PDF_START-->([\s\S]*?)<!--PDF_END-->/g;
+  processed = processed.replace(pdfRegex, (match, p1) => {
+    return `\n\`\`\`pdf\n${p1}\n\`\`\`\n`;
+  });
 
   const mcqRegex = /```mcq\n([\s\S]*?)```/g;
   let match;
@@ -778,7 +823,7 @@ const preprocessContent = (content: string) => {
   return processed;
 };
 
-const MarkdownComponents: any = {
+const getMarkdownComponents = (onPreview: (html: string) => void, onPrint: (html: string) => void): any => ({
   pre({ children }: any) {
     return <>{children}</>;
   },
@@ -802,6 +847,9 @@ const MarkdownComponents: any = {
     if (!inline && match && match[1] === 'flashcards') {
       return <FlashcardsViewer content={String(children).replace(/\n$/, '')} />;
     }
+    if (!inline && match && match[1] === 'pdf') {
+      return <PdfCard content={String(children).replace(/\n$/, '')} onPreview={onPreview} onPrint={onPrint} />;
+    }
     return !inline ? (
       <div className="bg-[#111111] p-4 rounded-xl overflow-x-auto my-4 border border-white/10 text-sm md:text-base font-mono" dir="ltr">
         <code className={className} {...props}>
@@ -814,6 +862,200 @@ const MarkdownComponents: any = {
       </code>
     );
   }
+});
+
+const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean, onClose: () => void, content: string | null, onSave: (html: string) => void }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && content && iframeRef.current) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html>
+          <html lang="ar" dir="rtl">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              body {
+                font-family: 'Cairo', sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              .pdf-page {
+                background: white;
+                width: 210mm;
+                min-height: 297mm;
+                padding: 20mm;
+                margin-bottom: 20px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                box-sizing: border-box;
+                position: relative;
+              }
+              @media print {
+                body {
+                  background: white;
+                  padding: 0;
+                }
+                .pdf-page {
+                  margin: 0;
+                  box-shadow: none;
+                  page-break-after: always;
+                }
+                .pdf-page:last-child {
+                  page-break-after: auto;
+                }
+              }
+              /* Add editable styles */
+              [contenteditable="true"] {
+                outline: none;
+                transition: background-color 0.2s;
+              }
+              [contenteditable="true"]:hover {
+                background-color: rgba(168, 163, 248, 0.1);
+                cursor: text;
+              }
+              [contenteditable="true"]:focus {
+                background-color: rgba(168, 163, 248, 0.2);
+                border-bottom: 2px dashed #A8A3F8;
+              }
+              
+              /* Print optimizations */
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="pdf-document">
+              ${content}
+            </div>
+            <script>
+              // Make text elements editable
+              document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, li, td, th').forEach(el => {
+                if(el.children.length === 0 || Array.from(el.childNodes).every(n => n.nodeType === Node.TEXT_NODE)) {
+                   el.setAttribute('contenteditable', 'true');
+                }
+              });
+            </script>
+          </body>
+          </html>
+        `);
+        doc.close();
+      }
+    }
+  }, [isOpen, content]);
+
+  if (!isOpen) return null;
+
+  const handlePrint = () => {
+    if (iframeRef.current && iframeRef.current.contentDocument) {
+      // Get the edited content from the iframe
+      const editedContent = iframeRef.current.contentDocument.querySelector('.pdf-document')?.innerHTML || content;
+      
+      // Create a hidden print area in the main document
+      const printArea = document.createElement('div');
+      printArea.id = 'pdf-print-area';
+      printArea.innerHTML = editedContent || '';
+      document.body.appendChild(printArea);
+      
+      // Print
+      window.print();
+      
+      // Cleanup
+      document.body.removeChild(printArea);
+    }
+  };
+
+  const handleSave = () => {
+    if (iframeRef.current && iframeRef.current.contentDocument) {
+      const editedContent = iframeRef.current.contentDocument.querySelector('.pdf-document')?.innerHTML || content;
+      if (editedContent) {
+        onSave(editedContent);
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 2000);
+      }
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-8"
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.95, opacity: 0, y: 20 }}
+          className="bg-[#111111] border border-white/10 rounded-[2rem] w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#050505]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#A8A3F8]/20 rounded-full flex items-center justify-center text-[#A8A3F8]">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">معاينة الملف</h2>
+                <p className="text-sm text-neutral-400">يمكنك النقر على أي نص لتعديله مباشرة</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleSave}
+                className="flex items-center gap-2 bg-[#A8A3F8] hover:bg-[#918cf2] text-[#050505] px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-[#A8A3F8]/20 hover:scale-105 active:scale-95"
+              >
+                {isSaved ? <CheckCircle size={18} /> : <Save size={18} />}
+                {isSaved ? 'تم الحفظ' : 'حفظ التعديلات'}
+              </button>
+              <button 
+                onClick={handlePrint}
+                className="flex items-center gap-2 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-[#050505] px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-green-500/20 hover:scale-105 active:scale-95"
+              >
+                <Printer size={18} /> طباعة PDF
+              </button>
+              <button 
+                onClick={onClose}
+                className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-neutral-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 bg-[#0a0a0a] relative overflow-hidden">
+            {content ? (
+              <iframe 
+                ref={iframeRef}
+                className="w-full h-full border-none bg-transparent"
+                title="PDF Preview"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-neutral-500">
+                <Loader2 size={40} className="animate-spin mb-4" />
+                <p>جاري تحميل المعاينة...</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
 };
 
 const SourcesModal = ({ isOpen, onClose, sources, setSources }: any) => {
@@ -1122,15 +1364,22 @@ export default function App() {
   });
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const messagesRef = useRef<Message[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<{ data: string; mimeType: string; name: string }[]>([]);
   const [selectedModel, setSelectedModel] = useState('gemini-3.1-pro-preview');
   const [isSourceMode, setIsSourceMode] = useState(false);
+  const [isPdfMode, setIsPdfMode] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(70);
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
+  const [pdfPreviewContent, setPdfPreviewContent] = useState<{ html: string, hash: string } | null>(null);
+  const [pdfEdits, setPdfEdits] = useState<Record<string, string>>({});
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const initialPinchDistance = useRef<number | null>(null);
@@ -1596,6 +1845,21 @@ export default function App() {
       if (isSourceMode) {
         currentSystemInstruction += "\n\n**تنبيه هام جداً:** وضع المصدر مفعل. يجب عليك الاعتماد بنسبة 100% على المصادر المرفقة فقط للإجابة على أسئلة المستخدم. لا تستخدم معلوماتك العامة. إذا كانت الإجابة غير موجودة في المصادر، اعتذر وقل أن المعلومات غير متوفرة في المصادر المرفقة.";
       }
+      if (isPdfMode) {
+        currentSystemInstruction += `\n\nأنت مساعد متخصص في إنشاء مستندات وملازم دراسية احترافية جداً بصيغة HTML تُطبع كـ PDF.
+قواعدك الأساسية:
+1. عندما يطلب المستخدم إنشاء ملف، أنشئ كود HTML كامل وضعه بين علامتي <!--PDF_START--> و <!--PDF_END-->
+2. ركز بنسبة 80% على تصميم "الملازم الدراسية" (Study Materials): استخدم تصاميم إبداعية، مربعات نصوص احترافية للملاحظات، إطارات للمفاهيم الهامة، جداول منسقة، ترويسة (Header) وتذييل (Footer) لكل صفحة، ترقيم صفحات، غلاف ملزمة جذاب.
+3. ركز بنسبة 20% على أنواع المستندات الأخرى (تقارير، سير ذاتية، عقود) بتصاميم رسمية واحترافية.
+4. استخدم Tailwind CSS عبر الـ classes المضمنة (حيث أن بيئة العرض تدعم Tailwind).
+5. استخدم خط 'Cairo' أو 'Tajawal' للنصوص العربية، وتأكد من دعم RTL (<html dir="rtl">).
+6. أضف ستايلات الطباعة \`@media print\` لضمان ظهور الألوان والخلفيات (\`-webkit-print-color-adjust: exact; print-color-adjust: exact;\`) وتحديد حجم الصفحة A4 (\`@page { size: A4; margin: 0; }\`).
+7. استخدم \`page-break-after: always\` أو \`break-after: page\` لفصل الصفحات بشكل صحيح.
+8. **الصور المرفقة**: إذا قام المستخدم بإرفاق صور، يمكنك إدراجها في الـ PDF باستخدام \`<img src="IMAGE_1" />\` للصورة الأولى، و \`<img src="IMAGE_2" />\` للصورة الثانية، وهكذا. سيقوم النظام تلقائياً باستبدال هذه الرموز بالصور الحقيقية.
+9. اجعل التصاميم "أقوى تصاميم ملفات بالعالم": استخدم التدرجات اللونية (Gradients)، الظلال (Shadows)، الحواف الدائرية (Rounded corners)، والأيقونات (يمكنك استخدام SVG مضمنة).
+10. يمكنك الدردشة مع المستخدم لتوضيح متطلباته قبل إنشاء الملف، وعندما يطلب الإنشاء، قم بتوليد الـ HTML.
+11. عند طلب تعديل على ملف سابق، أعد إرسال كود HTML الكامل بعد التعديل.`;
+      }
 
       const responseStream = await ai.models.generateContentStream({
         model: selectedModel,
@@ -1657,8 +1921,77 @@ export default function App() {
     }
   };
 
+  const getHash = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return hash.toString();
+  };
+
+  const handlePdfPreview = React.useCallback((html: string) => {
+    const hash = getHash(html);
+    let finalHtml = html;
+    
+    if (pdfEdits[hash]) {
+      finalHtml = pdfEdits[hash];
+    } else {
+      let imgIndex = 1;
+      messagesRef.current.forEach(msg => {
+        msg.attachments?.forEach(att => {
+          if (att.mimeType.startsWith('image/')) {
+            const regex = new RegExp(`IMAGE_${imgIndex}`, 'g');
+            finalHtml = finalHtml.replace(regex, `data:${att.mimeType};base64,${att.data}`);
+            imgIndex++;
+          }
+        });
+      });
+    }
+    setPdfPreviewContent({ html: finalHtml, hash });
+  }, [pdfEdits]);
+
+  const handlePdfPrint = React.useCallback((html: string) => {
+    const hash = getHash(html);
+    let finalHtml = html;
+    
+    if (pdfEdits[hash]) {
+      finalHtml = pdfEdits[hash];
+    } else {
+      let imgIndex = 1;
+      messagesRef.current.forEach(msg => {
+        msg.attachments?.forEach(att => {
+          if (att.mimeType.startsWith('image/')) {
+            const regex = new RegExp(`IMAGE_${imgIndex}`, 'g');
+            finalHtml = finalHtml.replace(regex, `data:${att.mimeType};base64,${att.data}`);
+            imgIndex++;
+          }
+        });
+      });
+    }
+    
+    const printArea = document.createElement('div');
+    printArea.id = 'pdf-print-area';
+    printArea.innerHTML = `<div class="pdf-document">${finalHtml}</div>`;
+    document.body.appendChild(printArea);
+    window.print();
+    document.body.removeChild(printArea);
+  }, [pdfEdits]);
+
+  const markdownComponents = React.useMemo(() => getMarkdownComponents(handlePdfPreview, handlePdfPrint), [handlePdfPreview, handlePdfPrint]);
+
   return (
     <div dir="rtl" className="flex h-full bg-[#050505] text-white font-sans overflow-hidden selection:bg-[#A8A3F8]/30">
+      <PdfPreviewModal 
+        isOpen={pdfPreviewContent !== null} 
+        onClose={() => setPdfPreviewContent(null)} 
+        content={pdfPreviewContent?.html || null} 
+        onSave={(newHtml) => {
+          if (pdfPreviewContent?.hash) {
+            setPdfEdits(prev => ({ ...prev, [pdfPreviewContent.hash]: newHtml }));
+          }
+        }}
+      />
       {/* Hidden File Inputs */}
       <input 
         type="file" 
@@ -1889,7 +2222,7 @@ export default function App() {
                           <ReactMarkdown 
                             remarkPlugins={[remarkGfm, remarkMath]}
                             rehypePlugins={[rehypeKatex, rehypeRaw]}
-                            components={MarkdownComponents}
+                            components={markdownComponents}
                           >
                             {preprocessContent(msg.content)}
                           </ReactMarkdown>
@@ -1939,6 +2272,14 @@ export default function App() {
               >
                 <Database size={16} className={isSourceMode ? "fill-current" : ""} />
                 وضع المصدر
+              </button>
+              
+              <button 
+                onClick={() => setIsPdfMode(!isPdfMode)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-lg ${isPdfMode ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-[#050505] scale-105' : 'bg-[#1A1A1A] text-neutral-400 hover:bg-[#222222] hover:text-white border border-white/5'}`}
+              >
+                <FileText size={16} className={isPdfMode ? "fill-current" : ""} />
+                وضع PDF
               </button>
               
               {isSourceMode && (

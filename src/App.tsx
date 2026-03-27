@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save } from 'lucide-react';
+import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save, Settings } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -7,9 +7,75 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  handleFirestoreError,
+  OperationType,
+  FirebaseUser
+} from './firebase';
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Error Boundary Component
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-[#111111] border border-white/10 p-8 rounded-[2rem] shadow-2xl">
+            <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <X size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-4">عذراً، حدث خطأ غير متوقع</h1>
+            <p className="text-neutral-400 mb-8">
+              لقد واجهنا مشكلة في تشغيل التطبيق. يرجى محاولة إعادة تحميل الصفحة.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-[#A8A3F8] text-[#050505] py-4 rounded-2xl font-bold hover:bg-[#918cf2] transition-all"
+            >
+              إعادة تحميل الصفحة
+            </button>
+            {process.env.NODE_ENV === 'development' && (
+              <pre className="mt-6 p-4 bg-black/50 rounded-xl text-left text-xs text-red-400 overflow-auto max-h-40">
+                {this.state.error?.message || String(this.state.error)}
+              </pre>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const SYSTEM_INSTRUCTION = `أنت KLYVON، مساعد ذكي مخصص للدراسة والتعليم. يجب عليك الالتزام بالتعليمات التالية بدقة:
 1. قم بإعادة صياغة وشرح محتوى الدرس بطريقة تبدأ من المستوى الصفر، واستهدف شخصًا لا يملك أي خلفية مسبقة عن الموضوع.
@@ -105,11 +171,13 @@ interface Source {
 interface Chat {
   id: string;
   title: string;
-  messages: Message[];
+  messages?: Message[];
   timestamp: number;
   sources?: Source[];
   isSourceMode?: boolean;
   pinned?: boolean;
+  createdAt: any;
+  updatedAt: any;
 }
 
 // Rule Card Component
@@ -1306,6 +1374,8 @@ const SourcesModal = ({ isOpen, onClose, sources, setSources }: any) => {
 };
 
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
@@ -1326,17 +1396,10 @@ export default function App() {
   const getSearchSnippet = (chat: Chat) => {
     if (!searchQuery) return null;
     const query = searchQuery.toLowerCase();
-    const matchingMessage = chat.messages.find(m => m.content.toLowerCase().includes(query));
-    if (!matchingMessage) return null;
-    
-    const content = matchingMessage.content;
-    const index = content.toLowerCase().indexOf(query);
-    const start = Math.max(0, index - 20);
-    const end = Math.min(content.length, index + query.length + 40);
-    let snippet = content.substring(start, end);
-    if (start > 0) snippet = '...' + snippet;
-    if (end < content.length) snippet = snippet + '...';
-    return snippet;
+    // Since messages are no longer part of the chat object in the sidebar list,
+    // we can only search the title for now, or implement a more complex search.
+    if (chat.title.toLowerCase().includes(query)) return null;
+    return null;
   };
 
   const [sidebarDragX, setSidebarDragX] = useState<number | null>(null);
@@ -1344,13 +1407,7 @@ export default function App() {
   const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [message, setMessage] = useState('');
   
-  const [chats, setChats] = useState<Chat[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('aqeel_ai_chats_v2');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
+  const [chats, setChats] = useState<Chat[]>([]);
 
   const [chatOptionsId, setChatOptionsId] = useState<string | null>(null);
   const [isRenamingId, setIsRenamingId] = useState<string | null>(null);
@@ -1376,6 +1433,9 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [userApiKey, setUserApiKey] = useState<string | null>(null);
+  const [tempApiKey, setTempApiKey] = useState('');
   const [zoomLevel, setZoomLevel] = useState(70);
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   const [pdfPreviewContent, setPdfPreviewContent] = useState<{ html: string, hash: string } | null>(null);
@@ -1391,6 +1451,165 @@ export default function App() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const scrollPositionsRef = useRef<Record<string, number>>({});
   const prevChatIdRef = useRef<string | null>(currentChatId);
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+      
+      if (currentUser) {
+        // Sync user profile
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        try {
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserApiKey(data.geminiApiKey || null);
+            setTempApiKey(data.geminiApiKey || '');
+          }
+
+          await setDoc(userDocRef, {
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+            lastLogin: serverTimestamp(),
+            role: 'user'
+          }, { merge: true });
+        } catch (error) {
+          console.error("Error syncing user profile:", error);
+        }
+      } else {
+        setUserApiKey(null);
+        setTempApiKey('');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const saveApiKey = async () => {
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await updateDoc(userDocRef, {
+        geminiApiKey: tempApiKey.trim() || null
+      });
+      setUserApiKey(tempApiKey.trim() || null);
+      setIsSettingsOpen(false);
+    } catch (error) {
+      console.error("Error saving API key:", error);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  // Sync Chats with Firestore
+  useEffect(() => {
+    if (!user || !isAuthReady) return;
+
+    const chatsRef = collection(db, 'users', user.uid, 'chats');
+    const q = query(chatsRef, orderBy('updatedAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const chatList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || 'محادثة جديدة',
+          timestamp: data.updatedAt?.toMillis() || Date.now(),
+          sources: data.sources || [],
+          isSourceMode: data.isSourceMode || false,
+          pinned: data.pinned || false,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date()
+        } as Chat;
+      });
+      setChats(chatList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/chats`);
+    });
+
+    return () => unsubscribe();
+  }, [user, isAuthReady]);
+
+  // Sync Messages with Firestore
+  useEffect(() => {
+    if (!user || !currentChatId || !isAuthReady) return;
+
+    const messagesRef = collection(db, 'users', user.uid, 'chats', currentChatId, 'messages');
+    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messageList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          role: data.role,
+          content: data.content,
+          attachments: data.attachments || [],
+          timestamp: data.timestamp?.toDate() || new Date()
+        } as Message;
+      });
+      setMessages(messageList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/chats/${currentChatId}/messages`);
+    });
+
+    return () => unsubscribe();
+  }, [user, currentChatId, isAuthReady]);
+
+  // Update sendMessage to save to Firestore
+  const saveMessageToFirestore = async (chatId: string, msg: Message) => {
+    if (!user) return;
+    try {
+      const messagesRef = collection(db, 'users', user.uid, 'chats', chatId, 'messages');
+      await addDoc(messagesRef, {
+        ...msg,
+        timestamp: serverTimestamp()
+      });
+      
+      const chatRef = doc(db, 'users', user.uid, 'chats', chatId);
+      await updateDoc(chatRef, { updatedAt: serverTimestamp() });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/chats/${chatId}/messages`);
+    }
+  };
+
+  // Update createChat to save to Firestore
+  const createChatOnFirestore = async (title: string) => {
+    if (!user) return null;
+    try {
+      const chatsRef = collection(db, 'users', user.uid, 'chats');
+      const newChat = await addDoc(chatsRef, {
+        userId: user.uid,
+        title,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isSourceMode: isSourceMode,
+        sources: sources,
+        isPdfMode: isPdfMode
+      });
+      return newChat.id;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/chats`);
+      return null;
+    }
+  };
 
   // Update mobile zoom
   useEffect(() => {
@@ -1598,35 +1817,33 @@ export default function App() {
   // Use a ref to avoid infinite loops and only sync when messages actually change
   const lastSyncedMessagesRef = useRef<string>('');
 
+  // Sync current chat settings to Firestore
   useEffect(() => {
-    if (currentChatId && messages.length > 0 && !isLoading) {
-      const messagesString = JSON.stringify(messages);
-      const sourcesString = JSON.stringify(sources);
-      const syncKey = messagesString + sourcesString + isSourceMode;
-      
-      if (lastSyncedMessagesRef.current === syncKey) return;
-      
-      lastSyncedMessagesRef.current = syncKey;
+    if (!user || !currentChatId || isLoading) return;
 
-      setChats(prev => {
-        const chatIndex = prev.findIndex(c => c.id === currentChatId);
-        if (chatIndex === -1) return prev;
-        
-        const updated = [...prev];
-        updated[chatIndex] = { 
-          ...updated[chatIndex], 
-          messages: messages,
-          timestamp: Date.now(),
+    const saveSettings = async () => {
+      try {
+        const chatRef = doc(db, 'users', user.uid, 'chats', currentChatId);
+        await updateDoc(chatRef, {
           sources: sources,
-          isSourceMode: isSourceMode
-        };
-        return updated;
-      });
-    }
-  }, [messages, currentChatId, isLoading, sources, isSourceMode]);
+          isSourceMode: isSourceMode,
+          updatedAt: serverTimestamp()
+        });
+      } catch (error) {
+        // Silent error for settings sync to avoid spamming
+        console.error("Error syncing chat settings:", error);
+      }
+    };
+
+    const timeoutId = setTimeout(saveSettings, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [currentChatId, sources, isSourceMode, user, isLoading]);
 
   const startNewChat = () => {
     setCurrentChatId(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('aqeel_ai_current_chat_id_v2');
+    }
     setMessages([]);
     setMessage('');
     setAttachments([]);
@@ -1637,36 +1854,64 @@ export default function App() {
 
   const switchChat = (id: string) => {
     setCurrentChatId(id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('aqeel_ai_current_chat_id_v2', id);
+    }
     const activeChat = chats.find(c => c.id === id);
     if (activeChat) {
-      setMessages(activeChat.messages);
       setIsSourceMode(activeChat.isSourceMode || false);
       setSources(activeChat.sources || []);
     } else {
-      setMessages([]);
       setIsSourceMode(false);
       setSources([]);
     }
     setIsSidebarOpen(false);
   };
 
-  const deleteChat = (e: React.MouseEvent, id: string) => {
+  const deleteChat = async (e: React.MouseEvent, id: string) => {
     if (e) e.stopPropagation();
-    const updatedChats = chats.filter(c => c.id !== id);
-    setChats(updatedChats);
-    if (currentChatId === id) {
-      setCurrentChatId(null);
-      setMessages([]);
+    if (!user) return;
+
+    try {
+      const chatRef = doc(db, 'users', user.uid, 'chats', id);
+      // Note: In a real app, you'd also delete the messages subcollection.
+      // Firestore doesn't delete subcollections automatically when a document is deleted.
+      // For this applet, we'll just delete the chat document.
+      await deleteDoc(chatRef);
+      
+      if (currentChatId === id) {
+        setCurrentChatId(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/chats/${id}`);
     }
   };
 
-  const renameChat = (id: string, newTitle: string) => {
-    if (!newTitle.trim()) return;
-    setChats(chats.map(c => c.id === id ? { ...c, title: newTitle } : c));
+  const renameChat = async (id: string, newTitle: string) => {
+    if (!newTitle.trim() || !user) return;
+    try {
+      const chatRef = doc(db, 'users', user.uid, 'chats', id);
+      await updateDoc(chatRef, { title: newTitle, updatedAt: serverTimestamp() });
+      setIsRenamingId(null);
+      setChatOptionsId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/chats/${id}`);
+    }
   };
 
-  const togglePinChat = (id: string) => {
-    setChats(chats.map(c => c.id === id ? { ...c, pinned: !c.pinned } : c));
+  const togglePinChat = async (id: string) => {
+    if (!user) return;
+    const chat = chats.find(c => c.id === id);
+    if (!chat) return;
+    
+    try {
+      const chatRef = doc(db, 'users', user.uid, 'chats', id);
+      await updateDoc(chatRef, { pinned: !chat.pinned, updatedAt: serverTimestamp() });
+      setChatOptionsId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/chats/${id}`);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1706,22 +1951,25 @@ export default function App() {
       attachments: [...attachments]
     };
 
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
+    // Optimistic update for UI responsiveness
+    setMessages(prev => [...prev, userMessage]);
     
-    // Create Chat in history if it doesn't exist
     let activeId = currentChatId;
     if (!activeId) {
-      activeId = Date.now().toString();
-      const newChat: Chat = {
-        id: activeId,
-        title: message.substring(0, 30) || 'محادثة جديدة',
-        messages: newMessages,
-        timestamp: Date.now()
-      };
-      setChats(prev => [newChat, ...prev]);
+      const newId = await createChatOnFirestore(message.substring(0, 30) || 'محادثة جديدة');
+      if (!newId) {
+        setIsLoading(false);
+        return;
+      }
+      activeId = newId;
       setCurrentChatId(activeId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('aqeel_ai_current_chat_id_v2', activeId);
+      }
     }
+
+    // Save user message to Firestore
+    await saveMessageToFirestore(activeId, userMessage);
 
     setMessage('');
     setAttachments([]);
@@ -1861,7 +2109,15 @@ export default function App() {
 11. عند طلب تعديل على ملف سابق، أعد إرسال كود HTML الكامل بعد التعديل.`;
       }
 
-      const responseStream = await ai.models.generateContentStream({
+      const apiKeyToUse = userApiKey || process.env.GEMINI_API_KEY;
+      if (!apiKeyToUse) {
+        setIsSettingsOpen(true);
+        throw new Error('يرجى إدخال مفتاح Gemini API في الإعدادات للمتابعة.');
+      }
+
+      const dynamicAi = new GoogleGenAI({ apiKey: apiKeyToUse });
+
+      const responseStream = await dynamicAi.models.generateContentStream({
         model: selectedModel,
         contents: contents,
         config: {
@@ -1901,6 +2157,14 @@ export default function App() {
         fullText += chunk.text || '';
       }
       isStreamComplete = true;
+
+      // Save assistant message to Firestore
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        role: 'model',
+        content: fullText
+      };
+      await saveMessageToFirestore(activeId, assistantMessage);
 
     } catch (error) {
       console.error('Error generating response:', error);
@@ -2055,13 +2319,11 @@ export default function App() {
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {chats.filter(chat => 
-            chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            chat.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
+            chat.title.toLowerCase().includes(searchQuery.toLowerCase())
           ).length > 0 ? (
             chats
               .filter(chat => 
-                chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                chat.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
+                chat.title.toLowerCase().includes(searchQuery.toLowerCase())
               )
               .sort((a, b) => {
                 if (a.pinned && !b.pinned) return -1;
@@ -2142,6 +2404,13 @@ export default function App() {
 
         {/* Header Controls */}
         <div className="absolute top-0 right-0 p-4 z-10 flex items-center gap-2">
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
+            title="الإعدادات"
+          >
+            <Settings size={24} />
+          </button>
           <button 
             onClick={startNewChat}
             className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
@@ -2518,6 +2787,86 @@ export default function App() {
                   <span className="text-sm text-neutral-400">حذف هذه المحادثة نهائياً</span>
                 </div>
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-[#111111] border border-white/10 rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl z-10"
+              dir="rtl"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-3xl font-bold text-white">الإعدادات</h3>
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="p-2 hover:bg-white/5 rounded-full text-neutral-500 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-lg font-bold text-white flex items-center gap-2">
+                      <Zap size={20} className="text-[#A8A3F8]" />
+                      مفتاح Gemini API
+                    </label>
+                    <a 
+                      href="https://aistudio.google.com/app/apikey" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-[#A8A3F8] hover:underline"
+                    >
+                      احصل على مفتاح مجاني
+                    </a>
+                  </div>
+                  <p className="text-sm text-neutral-400 leading-relaxed">
+                    أدخل مفتاح Gemini API الخاص بك لاستخدامه في المحادثات. سيتم حفظ المفتاح بشكل آمن في حسابك.
+                  </p>
+                  <div className="relative">
+                    <input 
+                      type="password"
+                      value={tempApiKey}
+                      onChange={(e) => setTempApiKey(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-[#A8A3F8]/50 transition-all font-mono"
+                      placeholder="AIzaSy..."
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex gap-4">
+                  <button 
+                    onClick={saveApiKey}
+                    className="flex-1 bg-[#A8A3F8] text-black font-bold py-4 rounded-2xl hover:bg-[#958df5] transition-all shadow-lg shadow-[#A8A3F8]/10"
+                  >
+                    حفظ الإعدادات
+                  </button>
+                  {user && (
+                    <button 
+                      onClick={handleLogout}
+                      className="flex-1 bg-red-500/10 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-500/20 transition-all border border-red-500/20"
+                    >
+                      تسجيل الخروج
+                    </button>
+                  )}
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

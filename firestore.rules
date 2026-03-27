@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{userId}
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable) - The user's UID
+    //   - email: string (required, email format) - The user's email
+    //   - displayName: string (optional) - The user's display name
+    //   - photoURL: string (optional, URL format) - The user's photo URL
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //   - lastLogin: timestamp (optional) - Last login time
+    //   - role: string (required, enum: ['user', 'admin']) - User role
+    //
+    // Collection: /users/{userId}/chats/{chatId}
+    // Document ID: {chatId}
+    // Fields:
+    //   - userId: string (required, immutable) - Owner UID
+    //   - title: string (optional, max 100 chars) - Chat title
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //   - updatedAt: timestamp (required) - Last update time
+    //   - isPdfMode: bool (optional) - PDF mode flag
+    //   - isSourceMode: bool (optional) - Source mode flag
+    //   - sources: list (optional) - List of sources
+    //   - pinned: bool (optional) - Pinned flag
+    //
+    // Collection: /users/{userId}/chats/{chatId}/messages/{messageId}
+    // Document ID: {messageId}
+    // Fields:
+    //   - role: string (required, enum: ['user', 'model']) - Message sender
+    //   - content: string (required, max 10000 chars) - Message text
+    //   - timestamp: timestamp (required, immutable) - Message time
+    //   - attachments: list (optional, max 10 items) - List of image data/URLs
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "jayshugsg@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'createdAt', 'role']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'lastLogin', 'role']) &&
+             data.uid == request.auth.uid &&
+             data.email == request.auth.token.email &&
+             isValidEmail(data.email) &&
+             data.role in ['user', 'admin'] &&
+             (data.photoURL == null || isValidUrl(data.photoURL));
+    }
+
+    function isValidChat(data) {
+      return hasRequiredFields(['userId', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields(['userId', 'title', 'createdAt', 'updatedAt', 'isPdfMode', 'isSourceMode', 'sources', 'pinned']) &&
+             data.userId == request.auth.uid &&
+             (data.title == null || (data.title is string && data.title.size() <= 100)) &&
+             (data.sources == null || data.sources is list);
+    }
+
+    function isValidMessage(data) {
+      return hasRequiredFields(['role', 'content', 'timestamp']) &&
+             hasOnlyAllowedFields(['role', 'content', 'timestamp', 'attachments', 'id']) &&
+             data.role in ['user', 'model'] &&
+             data.content is string && data.content.size() <= 10000 &&
+             (data.attachments == null || (data.attachments is list && data.attachments.size() <= 10));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == 'user' || isAdmin());
+                      
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                      (isOwner(userId) && request.resource.data.role == resource.data.role || isAdmin()) &&
+                      request.resource.data.createdAt == resource.data.createdAt &&
+                      request.resource.data.uid == resource.data.uid;
+
+      match /chats/{chatId} {
+        allow read: if isOwner(userId) || isAdmin();
+        
+        allow create: if isOwner(userId) && isValidChat(request.resource.data);
+        
+        allow update: if isOwner(userId) && isValidChat(request.resource.data) &&
+                        request.resource.data.createdAt == resource.data.createdAt &&
+                        request.resource.data.userId == resource.data.userId;
+        
+        allow delete: if isOwner(userId) || isAdmin();
+
+        match /messages/{messageId} {
+          allow read: if isOwner(userId) || isAdmin();
+          
+          allow create: if isOwner(userId) && isValidMessage(request.resource.data);
+          
+          allow update: if isOwner(userId) && isValidMessage(request.resource.data) &&
+                          request.resource.data.timestamp == resource.data.timestamp;
+          
+          allow delete: if isOwner(userId) || isAdmin();
+        }
+      }
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save, Settings } from 'lucide-react';
+import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -76,6 +76,9 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
     return this.props.children;
   }
 }
+
+// Initialize Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const SYSTEM_INSTRUCTION = `أنت KLYVON، مساعد ذكي مخصص للدراسة والتعليم. يجب عليك الالتزام بالتعليمات التالية بدقة:
 1. قم بإعادة صياغة وشرح محتوى الدرس بطريقة تبدأ من المستوى الصفر، واستهدف شخصًا لا يملك أي خلفية مسبقة عن الموضوع.
@@ -1433,9 +1436,6 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userApiKey, setUserApiKey] = useState<string | null>(null);
-  const [tempApiKey, setTempApiKey] = useState('');
   const [zoomLevel, setZoomLevel] = useState(70);
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   const [pdfPreviewContent, setPdfPreviewContent] = useState<{ html: string, hash: string } | null>(null);
@@ -1462,13 +1462,6 @@ export default function App() {
         // Sync user profile
         const userDocRef = doc(db, 'users', currentUser.uid);
         try {
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUserApiKey(data.geminiApiKey || null);
-            setTempApiKey(data.geminiApiKey || '');
-          }
-
           await setDoc(userDocRef, {
             uid: currentUser.uid,
             email: currentUser.email,
@@ -1480,27 +1473,10 @@ export default function App() {
         } catch (error) {
           console.error("Error syncing user profile:", error);
         }
-      } else {
-        setUserApiKey(null);
-        setTempApiKey('');
       }
     });
     return () => unsubscribe();
   }, []);
-
-  const saveApiKey = async () => {
-    if (!user) return;
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, {
-        geminiApiKey: tempApiKey.trim() || null
-      });
-      setUserApiKey(tempApiKey.trim() || null);
-      setIsSettingsOpen(false);
-    } catch (error) {
-      console.error("Error saving API key:", error);
-    }
-  };
 
   const handleLogin = async () => {
     try {
@@ -2109,15 +2085,7 @@ export default function App() {
 11. عند طلب تعديل على ملف سابق، أعد إرسال كود HTML الكامل بعد التعديل.`;
       }
 
-      const apiKeyToUse = userApiKey || process.env.GEMINI_API_KEY;
-      if (!apiKeyToUse) {
-        setIsSettingsOpen(true);
-        throw new Error('يرجى إدخال مفتاح Gemini API في الإعدادات للمتابعة.');
-      }
-
-      const dynamicAi = new GoogleGenAI({ apiKey: apiKeyToUse });
-
-      const responseStream = await dynamicAi.models.generateContentStream({
+      const responseStream = await ai.models.generateContentStream({
         model: selectedModel,
         contents: contents,
         config: {
@@ -2404,13 +2372,6 @@ export default function App() {
 
         {/* Header Controls */}
         <div className="absolute top-0 right-0 p-4 z-10 flex items-center gap-2">
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
-            title="الإعدادات"
-          >
-            <Settings size={24} />
-          </button>
           <button 
             onClick={startNewChat}
             className="text-neutral-400 hover:text-[#A8A3F8] transition-colors p-2 rounded-lg hover:bg-white/5 bg-[#050505]/80 backdrop-blur-sm border border-white/5 shadow-lg"
@@ -2787,86 +2748,6 @@ export default function App() {
                   <span className="text-sm text-neutral-400">حذف هذه المحادثة نهائياً</span>
                 </div>
               </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Settings Modal */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSettingsOpen(false)}
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative bg-[#111111] border border-white/10 rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl z-10"
-              dir="rtl"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-3xl font-bold text-white">الإعدادات</h3>
-                <button 
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-2 hover:bg-white/5 rounded-full text-neutral-500 hover:text-white transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-lg font-bold text-white flex items-center gap-2">
-                      <Zap size={20} className="text-[#A8A3F8]" />
-                      مفتاح Gemini API
-                    </label>
-                    <a 
-                      href="https://aistudio.google.com/app/apikey" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#A8A3F8] hover:underline"
-                    >
-                      احصل على مفتاح مجاني
-                    </a>
-                  </div>
-                  <p className="text-sm text-neutral-400 leading-relaxed">
-                    أدخل مفتاح Gemini API الخاص بك لاستخدامه في المحادثات. سيتم حفظ المفتاح بشكل آمن في حسابك.
-                  </p>
-                  <div className="relative">
-                    <input 
-                      type="password"
-                      value={tempApiKey}
-                      onChange={(e) => setTempApiKey(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-[#A8A3F8]/50 transition-all font-mono"
-                      placeholder="AIzaSy..."
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4 flex gap-4">
-                  <button 
-                    onClick={saveApiKey}
-                    className="flex-1 bg-[#A8A3F8] text-black font-bold py-4 rounded-2xl hover:bg-[#958df5] transition-all shadow-lg shadow-[#A8A3F8]/10"
-                  >
-                    حفظ الإعدادات
-                  </button>
-                  {user && (
-                    <button 
-                      onClick={handleLogout}
-                      className="flex-1 bg-red-500/10 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-500/20 transition-all border border-red-500/20"
-                    >
-                      تسجيل الخروج
-                    </button>
-                  )}
-                </div>
-              </div>
             </motion.div>
           </div>
         )}

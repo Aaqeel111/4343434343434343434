@@ -11,8 +11,7 @@
         "photoURL": { "type": "string", "description": "The user's profile picture URL." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the user account was created." },
         "lastLogin": { "type": "string", "format": "date-time", "description": "The last time the user logged in." },
-        "role": { "type": "string", "enum": ["user", "admin"], "description": "The user's role in the system." },
-        "geminiApiKey": { "type": "string", "description": "The user's personal Gemini API key." }
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "The user's role in the system." }
       },
       "required": ["uid", "email"]
     },

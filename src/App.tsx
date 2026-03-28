@@ -7,9 +7,18 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import { motion, AnimatePresence } from 'framer-motion';
+import { jsPDF } from 'jspdf';
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini safely
+const getAI = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("GEMINI_API_KEY is missing. AI features will be limited.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey });
+};
+const ai = getAI();
 
 const SYSTEM_INSTRUCTION = `أنت KLYVON، مساعد ذكي مخصص للدراسة والتعليم. يجب عليك الالتزام بالتعليمات التالية بدقة:
 1. قم بإعادة صياغة وشرح محتوى الدرس بطريقة تبدأ من المستوى الصفر، واستهدف شخصًا لا يملك أي خلفية مسبقة عن الموضوع.
@@ -1451,6 +1460,49 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
+  const [secretInput, setSecretInput] = useState('');
+
+  const generateAIPdf = () => {
+    try {
+      const doc = new jsPDF();
+      // Set font to a basic one that supports some characters or just use standard
+      doc.setFontSize(22);
+      doc.text("Artificial Intelligence (AI)", 105, 20, { align: "center" });
+      doc.setFontSize(14);
+      doc.text("What is AI?", 20, 40);
+      doc.setFontSize(12);
+      const text = "Artificial Intelligence is a branch of computer science that aims to build systems capable of simulating human intelligence. This includes learning, reasoning, and self-correction. It is used today in many fields such as medicine, education, and self-driving cars.";
+      const splitText = doc.splitTextToSize(text, 170);
+      doc.text(splitText, 20, 50);
+      
+      doc.text("Importance of AI:", 20, 80);
+      const importance = "1. Improving efficiency and productivity.\n2. Analyzing big data quickly.\n3. Providing innovative solutions to complex problems.";
+      const splitImportance = doc.splitTextToSize(importance, 170);
+      doc.text(splitImportance, 20, 90);
+
+      doc.save("AI_Report.pdf");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only track numbers
+      if (/^[0-9]$/.test(e.key)) {
+        setSecretInput(prev => {
+          const next = (prev + e.key).slice(-3);
+          if (next === '111') {
+            generateAIPdf();
+            return '';
+          }
+          return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -2012,6 +2064,10 @@ export default function App() {
 11. عند طلب تعديل على ملف سابق، أعد إرسال كود HTML الكامل بعد التعديل.`;
       }
 
+      if (!ai) {
+        throw new Error("عذراً، مفتاح Gemini غير متوفر حالياً. يرجى التحقق من إعدادات الاستضافة.");
+      }
+
       const responseStream = await ai.models.generateContentStream({
         model: selectedModel,
         contents: contents,
@@ -2260,6 +2316,15 @@ export default function App() {
               {searchQuery ? 'لا توجد نتائج تطابق بحثك' : 'لا توجد محادثات سابقة'}
             </div>
           )}
+        </div>
+        <div className="p-3 border-t border-white/10">
+          <button 
+            onClick={generateAIPdf}
+            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-500 hover:text-[#A8A3F8] transition-all text-xs font-bold"
+          >
+            <Star size={14} />
+            <span>111</span>
+          </button>
         </div>
       </motion.div>
 

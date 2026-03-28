@@ -73,7 +73,7 @@ body {
 
 /* Custom Markdown Styles - Design Templates */
 .markdown-body {
-  @apply text-lg md:text-xl leading-relaxed;
+  @apply text-xl md:text-2xl leading-relaxed;
 }
 
 .markdown-body p {

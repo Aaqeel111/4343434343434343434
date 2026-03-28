@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save } from 'lucide-react';
+import { Plus, Send, Menu, X, Image as ImageIcon, FileText, Camera, Loader2, Trash2, Play, CheckCircle, Award, ChevronLeft, ChevronRight, Info, Calculator, PenTool, Zap, BookOpen, Star, Search, WifiOff, Layers, Check, RotateCcw, Database, Headphones, Link as LinkIcon, Youtube, Type, Globe, MoreVertical, Pin, Edit2, ArrowUp, Eye, Printer, Download, Save, PenLine } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -734,19 +734,14 @@ const InteractiveExample = ({ content }: { content: string }) => {
 
 const PdfCard = ({ content, onPreview, onPrint }: { content: string, onPreview: (html: string) => void, onPrint: (html: string) => void }) => {
   return (
-    <div className="my-6 w-full max-w-3xl mx-auto bg-[#111111] border border-green-500/30 rounded-[2rem] p-8 shadow-2xl flex flex-col items-center justify-center relative overflow-hidden group">
-      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-500"></div>
-      <div className="absolute -top-20 -right-20 w-64 h-64 bg-green-500/10 rounded-full blur-3xl"></div>
+    <div className="my-6 w-full max-w-3xl mx-auto bg-[#111111] border border-purple-500/30 rounded-[2rem] p-8 shadow-2xl flex flex-col items-center justify-center relative overflow-hidden group">
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-500"></div>
+      <div className="absolute -top-20 -right-20 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
       <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
       
-      <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/20 relative z-10">
-        <FileText size={40} className="text-green-400" />
+      <div className="w-20 h-20 bg-purple-500/20 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-purple-500/20 relative z-10">
+        <FileText size={40} className="text-purple-400" />
       </div>
-      
-      <h3 className="text-2xl font-bold text-white mb-3 z-10 text-center">تم إنشاء الملف بنجاح! ✅</h3>
-      <p className="text-neutral-400 mb-8 z-10 text-center max-w-md leading-relaxed">
-        تم تجهيز الملف بتصميم احترافي. يمكنك الآن معاينته، تعديل النصوص، أو طباعته مباشرة كـ PDF.
-      </p>
       
       <div className="flex flex-wrap items-center justify-center gap-4 z-10 w-full">
         <button 
@@ -757,7 +752,7 @@ const PdfCard = ({ content, onPreview, onPrint }: { content: string, onPreview: 
         </button>
         <button 
           onClick={() => onPrint(content)}
-          className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-[#050505] px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-green-500/20 hover:scale-105 active:scale-95"
+          className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gradient-to-r from-purple-400 to-indigo-500 hover:from-purple-300 hover:to-indigo-400 text-[#050505] px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/20 hover:scale-105 active:scale-95"
         >
           <Printer size={20} /> طباعة PDF
         </button>
@@ -778,11 +773,21 @@ const preprocessContent = (content: string) => {
   
   let processed = processedParts.join('');
 
+  // Remove surrounding code block markers if they enclose PDF tags
+  processed = processed.replace(/```(?:html)?\s*<!--PDF_START-->/gi, '<!--PDF_START-->');
+  processed = processed.replace(/<!--PDF_END-->\s*```/gi, '<!--PDF_END-->');
+
   // Replace PDF blocks with a custom code block
   const pdfRegex = /<!--PDF_START-->([\s\S]*?)<!--PDF_END-->/g;
   processed = processed.replace(pdfRegex, (match, p1) => {
     return `\n\`\`\`pdf\n${p1}\n\`\`\`\n`;
   });
+
+  // Hide incomplete PDF blocks during streaming
+  const incompletePdfRegex = /<!--PDF_START-->([\s\S]*)$/;
+  if (incompletePdfRegex.test(processed)) {
+    processed = processed.replace(incompletePdfRegex, '\n```pdf_loading\n```\n');
+  }
 
   const mcqRegex = /```mcq\n([\s\S]*?)```/g;
   let match;
@@ -850,6 +855,16 @@ const getMarkdownComponents = (onPreview: (html: string) => void, onPrint: (html
     if (!inline && match && match[1] === 'pdf') {
       return <PdfCard content={String(children).replace(/\n$/, '')} onPreview={onPreview} onPrint={onPrint} />;
     }
+    if (!inline && match && match[1] === 'pdf_loading') {
+      return (
+        <div className="my-6 w-full max-w-3xl mx-auto bg-[#111111] border border-[#A8A3F8]/30 rounded-[2rem] p-8 shadow-2xl flex flex-col items-center justify-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#A8A3F8]/5 to-transparent animate-pulse"></div>
+          <Loader2 size={40} className="text-[#A8A3F8] animate-spin mb-4" />
+          <h3 className="text-xl font-bold text-[#A8A3F8] z-10 text-center">جاري إنشاء وتنسيق ملف PDF...</h3>
+          <p className="text-neutral-400 mt-2 z-10 text-center">يرجى الانتظار بينما نقوم بتجهيز التصميم الاحترافي.</p>
+        </div>
+      );
+    }
     return !inline ? (
       <div className="bg-[#111111] p-4 rounded-xl overflow-x-auto my-4 border border-white/10 text-sm md:text-base font-mono" dir="ltr">
         <code className={className} {...props}>
@@ -867,6 +882,40 @@ const getMarkdownComponents = (onPreview: (html: string) => void, onPrint: (html
 const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean, onClose: () => void, content: string | null, onSave: (html: string) => void }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [showZoomIndicator, setShowZoomIndicator] = useState(false);
+  const initialZoom = useRef<number>(100);
+  const zoomTimeout = useRef<any>(null);
+
+  // Apply zoom to iframe
+  useEffect(() => {
+    if (iframeRef.current && iframeRef.current.contentDocument) {
+      iframeRef.current.contentDocument.body.style.zoom = `${zoomLevel}%`;
+    }
+    
+    setShowZoomIndicator(true);
+    if (zoomTimeout.current) clearTimeout(zoomTimeout.current);
+    zoomTimeout.current = setTimeout(() => setShowZoomIndicator(false), 1500);
+  }, [zoomLevel, isOpen]);
+
+  // Listen for messages from iframe
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'ZOOM_WHEEL') {
+        const delta = e.data.deltaY > 0 ? -10 : 10;
+        setZoomLevel(prev => Math.min(200, Math.max(30, prev + delta)));
+      } else if (e.data?.type === 'ZOOM_TOUCH_START') {
+        initialZoom.current = zoomLevel;
+      } else if (e.data?.type === 'ZOOM_TOUCH_MOVE') {
+        const newZoom = Math.round(initialZoom.current * e.data.delta);
+        setZoomLevel(Math.min(200, Math.max(30, newZoom)));
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [zoomLevel]);
 
   useEffect(() => {
     if (isOpen && content && iframeRef.current) {
@@ -894,12 +943,23 @@ const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean
               .pdf-page {
                 background: white;
                 width: 210mm;
+                max-width: 100%;
                 min-height: 297mm;
                 padding: 20mm;
                 margin-bottom: 20px;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                 box-sizing: border-box;
                 position: relative;
+                overflow-x: hidden;
+              }
+              @media screen and (max-width: 768px) {
+                body {
+                  padding: 10px;
+                }
+                .pdf-page {
+                  padding: 10mm;
+                  min-height: auto;
+                }
               }
               @media print {
                 body {
@@ -907,6 +967,9 @@ const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean
                   padding: 0;
                 }
                 .pdf-page {
+                  width: 210mm;
+                  min-height: 297mm;
+                  padding: 20mm;
                   margin: 0;
                   box-shadow: none;
                   page-break-after: always;
@@ -920,11 +983,11 @@ const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean
                 outline: none;
                 transition: background-color 0.2s;
               }
-              [contenteditable="true"]:hover {
+              body.edit-mode [contenteditable="true"]:hover {
                 background-color: rgba(168, 163, 248, 0.1);
                 cursor: text;
               }
-              [contenteditable="true"]:focus {
+              body.edit-mode [contenteditable="true"]:focus {
                 background-color: rgba(168, 163, 248, 0.2);
                 border-bottom: 2px dashed #A8A3F8;
               }
@@ -936,17 +999,64 @@ const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean
               }
             </style>
           </head>
-          <body>
+          <body class="${isEditMode ? 'edit-mode' : ''}">
             <div class="pdf-document">
               ${content}
             </div>
             <script>
-              // Make text elements editable
-              document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, li, td, th').forEach(el => {
-                if(el.children.length === 0 || Array.from(el.childNodes).every(n => n.nodeType === Node.TEXT_NODE)) {
-                   el.setAttribute('contenteditable', 'true');
+              // Make text elements editable based on mode
+              const updateEditableState = (isEditable) => {
+                document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, li, td, th').forEach(el => {
+                  if(el.children.length === 0 || Array.from(el.childNodes).every(n => n.nodeType === Node.TEXT_NODE)) {
+                     el.setAttribute('contenteditable', isEditable ? 'true' : 'false');
+                  }
+                });
+              };
+              
+              updateEditableState(${isEditMode});
+
+              // Listen for mode changes from parent
+              window.addEventListener('message', (e) => {
+                if (e.data?.type === 'SET_EDIT_MODE') {
+                  if (e.data.isEditMode) {
+                    document.body.classList.add('edit-mode');
+                  } else {
+                    document.body.classList.remove('edit-mode');
+                  }
+                  updateEditableState(e.data.isEditMode);
                 }
               });
+
+              // Forward wheel events for zoom to parent
+              document.addEventListener('wheel', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  e.preventDefault();
+                  window.parent.postMessage({ type: 'ZOOM_WHEEL', deltaY: e.deltaY }, '*');
+                }
+              }, { passive: false });
+
+              // Forward touch events for pinch zoom to parent
+              let initialDistance = 0;
+              document.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                  e.preventDefault();
+                  const touch1 = e.touches[0];
+                  const touch2 = e.touches[1];
+                  initialDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+                  window.parent.postMessage({ type: 'ZOOM_TOUCH_START' }, '*');
+                }
+              }, { passive: false });
+
+              document.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                  e.preventDefault();
+                  const touch1 = e.touches[0];
+                  const touch2 = e.touches[1];
+                  const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+                  const delta = currentDistance / initialDistance;
+                  window.parent.postMessage({ type: 'ZOOM_TOUCH_MOVE', delta }, '*');
+                }
+              }, { passive: false });
             </script>
           </body>
           </html>
@@ -955,6 +1065,13 @@ const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean
       }
     }
   }, [isOpen, content]);
+
+  // Update edit mode in iframe when it changes
+  useEffect(() => {
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'SET_EDIT_MODE', isEditMode }, '*');
+    }
+  }, [isEditMode]);
 
   if (!isOpen) return null;
 
@@ -994,51 +1111,76 @@ const PdfPreviewModal = ({ isOpen, onClose, content, onSave }: { isOpen: boolean
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-8"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          className="bg-[#111111] border border-white/10 rounded-[2rem] w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+          className="w-full h-full flex flex-col overflow-hidden relative"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#050505]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#A8A3F8]/20 rounded-full flex items-center justify-center text-[#A8A3F8]">
-                <FileText size={20} />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">معاينة الملف</h2>
-                <p className="text-sm text-neutral-400">يمكنك النقر على أي نص لتعديله مباشرة</p>
-              </div>
+          {/* Zoom Indicator */}
+          {showZoomIndicator && (
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[#050505]/80 backdrop-blur-md border border-[#A8A3F8]/30 px-4 py-2 rounded-full shadow-2xl animate-in fade-in zoom-in duration-300 pointer-events-none">
+              <span className="text-[#A8A3F8] font-bold text-sm">
+                الزوم: {zoomLevel}%
+              </span>
             </div>
-            
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={handleSave}
-                className="flex items-center gap-2 bg-[#A8A3F8] hover:bg-[#918cf2] text-[#050505] px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-[#A8A3F8]/20 hover:scale-105 active:scale-95"
-              >
-                {isSaved ? <CheckCircle size={18} /> : <Save size={18} />}
-                {isSaved ? 'تم الحفظ' : 'حفظ التعديلات'}
-              </button>
-              <button 
-                onClick={handlePrint}
-                className="flex items-center gap-2 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-[#050505] px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-green-500/20 hover:scale-105 active:scale-95"
-              >
-                <Printer size={18} /> طباعة PDF
-              </button>
-              <button 
-                onClick={onClose}
-                className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-neutral-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
+          )}
+
+          {/* Floating Actions */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#111111]/90 backdrop-blur-md border border-white/10 p-2 rounded-full shadow-2xl z-50">
+            {isEditMode ? (
+              <>
+                <button 
+                  onClick={() => {
+                    handleSave();
+                    setIsEditMode(false);
+                  }}
+                  title="حفظ التعديلات"
+                  className="w-12 h-12 flex items-center justify-center bg-[#A8A3F8] hover:bg-[#918cf2] text-[#050505] rounded-full transition-all shadow-lg shadow-[#A8A3F8]/20 hover:scale-105 active:scale-95"
+                >
+                  {isSaved ? <CheckCircle size={22} /> : <Save size={22} />}
+                </button>
+                <div className="w-[1px] h-8 bg-white/10 mx-1"></div>
+                <button 
+                  onClick={() => setIsEditMode(false)}
+                  title="إلغاء التعديل"
+                  className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white rounded-full transition-colors"
+                >
+                  <X size={22} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  onClick={() => setIsEditMode(true)}
+                  title="تعديل الملف"
+                  className="w-12 h-12 flex items-center justify-center bg-[#A8A3F8] hover:bg-[#918cf2] text-[#050505] rounded-full transition-all shadow-lg shadow-[#A8A3F8]/20 hover:scale-105 active:scale-95"
+                >
+                  <PenLine size={22} />
+                </button>
+                <button 
+                  onClick={handlePrint}
+                  title="طباعة PDF"
+                  className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-[#A8A3F8] to-[#8b85f0] hover:from-[#918cf2] hover:to-[#7a74e6] text-[#050505] rounded-full transition-all shadow-lg shadow-[#A8A3F8]/20 hover:scale-105 active:scale-95"
+                >
+                  <Printer size={22} />
+                </button>
+                <div className="w-[1px] h-8 bg-white/10 mx-1"></div>
+                <button 
+                  onClick={onClose}
+                  title="إغلاق"
+                  className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white rounded-full transition-colors"
+                >
+                  <X size={22} />
+                </button>
+              </>
+            )}
           </div>
 
           {/* Content */}
-          <div className="flex-1 bg-[#0a0a0a] relative overflow-hidden">
+          <div className="flex-1 bg-[#f5f5f5] relative overflow-hidden">
             {content ? (
               <iframe 
                 ref={iframeRef}
@@ -2203,9 +2345,9 @@ export default function App() {
                     initial={{ opacity: 0, y: 20, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
-                    className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                    className="flex flex-col w-full"
                   >
-                    <div className={`max-w-[90%] md:max-w-[85%] ${msg.role === 'user' ? 'bg-[#222222] text-white px-5 py-4 rounded-2xl rounded-tr-2xl shadow-md' : 'text-neutral-200 w-full'}`}>
+                    <div className={`w-full ${msg.role === 'user' ? 'mt-8 mb-2' : 'text-neutral-200'}`}>
                       
                       {/* Attachments Display */}
                       {msg.attachments && msg.attachments.length > 0 && (
@@ -2227,7 +2369,7 @@ export default function App() {
   
                       {/* Message Content */}
                       {msg.role === 'user' ? (
-                        <div className="whitespace-pre-wrap text-lg text-start" dir="auto">{msg.content}</div>
+                        <h2 className="whitespace-pre-wrap text-2xl md:text-3xl font-bold text-white text-start leading-relaxed border-s-4 border-[#A8A3F8] ps-4" dir="auto">{msg.content}</h2>
                       ) : (
                         <div className="markdown-body relative">
                           <ReactMarkdown 
